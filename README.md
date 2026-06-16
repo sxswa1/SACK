@@ -11,18 +11,6 @@ This repository contains the SACK artifact source code for the accompanying pape
 - `scripts/`: measurement and profiling scripts used for artifact reporting.
 - `reports/`: small paper-supporting timing summaries. Large raw timing outputs are not included.
 
-## Not Included
-
-The following are excluded to keep the artifact small and safe to publish:
-
-- `data/`
-- `data_sources/`
-- `storage/`
-- GraphDB installation/runtime directories
-- PostgreSQL database files
-- API keys and local credentials
-- generated logs, caches, and notebooks checkpoints
-
 ## Environment
 
 Create a Python environment and install the repository requirements:
