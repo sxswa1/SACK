@@ -1,0 +1,19 @@
+pandas
+SPARQLWrapper
+tqdm
+scikit-learn
+seaborn
+numpy
+graphviz
+camelsplit
+matplotlib
+#torch==1.13.0
+#ogb
+#memory_profiler
+#bitstring
+#compress_fasttext
+#nltk
+#fasttext
+#dateparser
+#torch-sparse -f https://pytorch-geometric.com/whl/torch-1.13.0+cpu.html --no-index
+#torch_geometric

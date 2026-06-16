@@ -1,0 +1,5 @@
+# SACK uses a single unified environment.
+#
+# Install dependencies from the repository root:
+#
+#   pip install -r requirements.txt

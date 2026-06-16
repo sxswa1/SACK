@@ -1,0 +1,9 @@
+# Legacy SACKKnowledgeBase requirements are intentionally not used by the unified SACK environment.
+#
+# Install from the repository root instead:
+#
+#   pip install -r requirements.txt
+#
+# The old SACKKnowledgeBase dependency set pinned numpy/pandas/scikit-learn/torch/tensorflow
+# to versions that conflict with SACK runtime. SACK now owns the environment, and
+# knowledge code is expected to run against the unified root requirements.

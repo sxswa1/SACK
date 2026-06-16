@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+.idea/
+
+# Local credentials and licenses
+sack/api_key.txt
+*.license
+
+# Logs and runtime state
+*.log
+graphdb.log
+graphdb/
+graphdb-home/
+
+# Large/generated data assets
+data/
+data_sources/
+storage/
+
+# Local vector/db artifacts
+sack/LLMComponent/db/

@@ -1,0 +1,11 @@
+name: sack
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - setuptools
+  - wheel
+  - pip:
+      - -r requirements.txt
