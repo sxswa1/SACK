@@ -21,7 +21,7 @@ class EDASummarizer(Summarizer):
         )
         self.tool_field_mapping = {
             "pre_eda":{
-                # 鏁版嵁璐ㄩ噺鐩稿叧宸ュ叿
+                # 数据质量相关工具
                 "calculate_overall_missing_rate": "data_quality.missingness.overall_missing_rate",
                 "analyze_column_missing_distribution": "data_quality.missingness.column_missing_distribution",
                 "analyze_row_completeness": "data_quality.missingness.row_completeness",
@@ -32,7 +32,7 @@ class EDASummarizer(Summarizer):
                 "check_data_type_consistency": "data_quality.data_integrity.type_violation_ratio",
                 "check_uniqueness_constraints": "data_quality.data_integrity.unique_violation_ratio",
 
-                # 鍒嗗竷鐩稿叧宸ュ叿
+                # 分布相关工具
                 "analyze_numerical_skewness": "basic_distribution.numerical.skewness_profile",
                 "analyze_numerical_scale": "basic_distribution.numerical.scale_characteristics",
                 "test_normality": "basic_distribution.numerical.normality_assessment",
@@ -42,11 +42,11 @@ class EDASummarizer(Summarizer):
                 "analyze_categorical_imbalance": "basic_distribution.categorical.imbalance_profile",
                 "detect_rare_categories": "basic_distribution.categorical.rare_categories",
 
-                # 缁村害鐩稿叧宸ュ叿
+                # 维度相关工具
                 "calculate_samples_per_feature": "basic_dimensionality.samples_per_feature",
             },
             "deep_eda":{
-                # 娣卞害EDA宸ュ叿
+                # 深度EDA工具
                 "analyze_numerical_correlation_strength": "feature_relationships.correlation_structure.correlation_strength",
                 "detect_correlation_clusters": "feature_relationships.correlation_structure.correlation_clustering",
                 "detect_multicollinearity_vif": "feature_relationships.correlation_structure.multicollinearity",
@@ -75,7 +75,7 @@ class EDASummarizer(Summarizer):
         target_template = EDAInsightTemplate[template_key]
 
 
-        # 閫掑綊灏嗘ā鏉垮€艰涓簎nknown锛堜粎淇濈暀褰撳墠闃舵鐨勭粨鏋勶級
+        # 递归把模板字段设为 unknown，仅保留当前阶段结构。
         def set_unknown(template):
             if isinstance(template, dict):
                 return {k: set_unknown(v) for k, v in template.items()}
@@ -112,7 +112,7 @@ class EDASummarizer(Summarizer):
 
         visual_insights = self._get_insight_from_visualization(state)
 
-        # 鑾峰彇褰撳墠闃舵鐨勫伐鍏蜂笂涓嬫枃
+        # 获取当前阶段的工具上下文。
         tools, tool_names = self._get_tools(state)
         tool_context = {
             "tool_list": tool_names,
@@ -133,7 +133,7 @@ class EDASummarizer(Summarizer):
         """Build the template key mapping."""
         eda_phase = state.phase
         template_key = "pre_eda" if eda_phase == "PEDA Insight Extraction" else "deep_eda"
-        # 缁熻鏈煡瀛楁
+        # 统一预期字段。
         unknown_count = self._count_unknown_fields(eda_insight)
         total_fields = self._count_total_fields(eda_insight)
 
@@ -145,7 +145,7 @@ class EDASummarizer(Summarizer):
             "completeness_score": round((total_fields - unknown_count) / total_fields * 5, 1) if total_fields > 0 else 0,
             "unknown_fields_count": unknown_count,
             "total_fields_count": total_fields,
-            "tool_output_validation": tool_output_extraction,  # 宸ュ叿杈撳嚭楠岃瘉缁撴灉
+            "tool_output_validation": tool_output_extraction,  # 工具输出验证结果
             "recommendations": self._generate_validation_recommendations(unknown_count, total_fields, tool_output_extraction)
         }
 
@@ -172,7 +172,7 @@ class EDASummarizer(Summarizer):
                 }
                 continue
 
-            # 鑾峰彇宸ュ叿瀵瑰簲鐨勫瓧娈佃矾寰勶紙浠庡綋鍓嶉樁娈垫槧灏勫眰鍙栵級
+            # 获取工具对应的字段路径（从当前阶段映射层取）
             field_paths = current_phase_tool_mapping[tool]
             if not isinstance(field_paths, list):
                 field_paths = [field_paths]
@@ -227,7 +227,7 @@ class EDASummarizer(Summarizer):
             recommendations.append(
                 f"Low overall completeness ({completeness_ratio:.1%}) - enhance extraction from tool outputs")
 
-        # 宸ュ叿杈撳嚭寤鸿
+        # 工具输出建议。
         missing_tools = tool_validation.get("missing_tool_outputs", [])
         if missing_tools:
             recommendations.append(f"Missing output extraction for critical tools: {', '.join(missing_tools)}")
@@ -324,7 +324,7 @@ class EDASummarizer(Summarizer):
     def _remove_evidence_fields(self, data: Any, template: Any) -> Any:
         """Read the summary report."""
         if isinstance(data, dict):
-            # 澶勭悊璇佹嵁鍖呰缁撴瀯
+            # 处理证据包的结构。
             if "value" in data and "_evidence" in data and len(data) == 2:
                 return data["value"]
 
@@ -354,12 +354,12 @@ class EDASummarizer(Summarizer):
         template_json = json.dumps(template, indent=2)
         template_key = templates["template_key"]
 
-        # 鑾峰彇EDA淇℃伅锛堝惈宸ュ叿涓婁笅鏂囷級
+        # 获取EDA信息（含工具上下文）
         eda_info = self._extract_eda_specific_information(state)
         tool_context = json.dumps(eda_info["tool_context"], indent=2)
         current_tools = eda_info["tool_context"]["tool_list"]
 
-        # 鐢熸垚宸ュ叿-瀛楁鏄犲皠琛紙鐢ㄤ簬鎻愮ず璇嶏級
+        # 生成工具到字段的映射表，用于提示词。
 
         tool_mapping_table = "| Tool Name | Mapped EDAInsight Fields |\n|-----------|--------------------------|\n"
         # 先获取当前阶段的工具映射层
@@ -390,13 +390,13 @@ class EDASummarizer(Summarizer):
             # 每次重试重置对话历史，避免历史累积影响结果
             population_history = []
             try:
-                # 璋冪敤LLM鐢熸垚缁撴灉
+                # 调用LLM生成结果
                 populated_with_evidence_raw, population_history = self.llm.generate(
                     population_prompt,
                     population_history,
                     max_completion_tokens=8192
                 )
-                # 鏍￠獙杩斿洖缁撴灉鏄惁鏈夋晥
+                # 检查返回结果是否有效。
                 if populated_with_evidence_raw and populated_with_evidence_raw.strip():
                     is_success = True
                 else:
@@ -413,7 +413,7 @@ class EDASummarizer(Summarizer):
                 populated_with_evidence_raw = None
 
         if is_success:
-            # 瑙ｆ瀽骞舵彁鍙栫函鍑€鐨凟DAInsight
+            # 解析并提取纯净的 EDAInsight。
             populated_insight_with_evidence, populated_insight = self._extract_clean_eda_insight(
                 populated_with_evidence_raw, template
             )
@@ -423,9 +423,9 @@ class EDASummarizer(Summarizer):
             )
             populated_insight_with_evidence = template
             populated_insight = template
-        # 楠岃瘉璐ㄩ噺锛堝熀浜庡伐鍏疯緭鍑猴級
+        # 验证质量（基于工具输出）
         validation_result = self._validate_eda_insight(state, populated_insight, eda_info)
-        # 淇濆瓨缁撴灉
+        # 保存结果
         self._save_eda_insight_results(state, populated_insight_with_evidence, populated_insight, validation_result)
         return populated_insight
 

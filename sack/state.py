@@ -148,9 +148,9 @@ class State:
     def get_current_agent(self) -> str:
         return self.agents[self.current_step % len(self.agents)]
 
-    def generate_rules(self) -> str:  # 娣诲姞宸ュ叿鍑芥暟搴旂敤瑙勫垯
+    def generate_rules(self) -> str:  # 添加工具函数应用规则
         if self.rulebook_parameters[self.phase]['status']:  # status 标识是否启用
-            user_rules = "\n".join(self.rulebook_parameters[self.phase]['user_defined_rules'])  # 娣诲姞user_rules
+            user_rules = "\n".join(self.rulebook_parameters[self.phase]['user_defined_rules'])  # 添加user_rules
             default_rules = self.rulebook_parameters[self.phase]['default_rules_with_parameters']
             default_rules = self._format_rules(default_rules)
             rules = user_rules +"\n\n"+ default_rules

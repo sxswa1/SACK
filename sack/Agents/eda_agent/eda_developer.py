@@ -59,11 +59,11 @@ class EDADeveloper(Developer):
                                "You have advanced reasoning abilities and can improve your answers through reflection."
             experience_with_suggestion = self._gather_experience_with_suggestion(state)
 
-        # 澶氳疆鐢熸垚/璋冭瘯閫昏緫锛堜繚鐣欐牳蹇冩祦绋嬶級
+        # 多轮生成/调试逻辑（保留核心流程）
         while round <= max_tries:
             if round == 0 or retry_flag or no_code_flag:
                 if len(state.memory) == 1:
-                    # 绗竴杞細鏃犵粡楠岋紝鐢熸垚浠ｇ爜
+                    # 第一轮没有经验，生成代码。
                     input = PROMPT_DEVELOPER_EDA.format(
                         phases_in_context=state.context, phase_name=state.phase,
                         state_info=state_info, background_info=background_info, plan=plan, task=task
@@ -92,7 +92,7 @@ class EDADeveloper(Developer):
                     input = PROMPT_DEVELOPER_WITH_EXPERIENCE_ROUND0_2
                     raw_reply, history = self.llm.generate(input, history, max_completion_tokens=4096)
 
-                # 淇濆瓨鐢熸垚缁撴灉
+                # 保存生成结果
                 if retry_flag:
                     self._save_all_error_messages(state)
                     self.all_error_messages = []
@@ -111,7 +111,7 @@ class EDADeveloper(Developer):
                 retry_flag = False
 
             elif round >= 1:
-                # 璋冭瘯鍒嗘敮
+                # 调试分支
                 if error_flag and round < max_tries:
                     raw_reply, single_round_debug_history = self._debug_code(
                         state, error_flag, not_pass_flag, not_pass_information, raw_reply
@@ -121,7 +121,7 @@ class EDADeveloper(Developer):
                         logger.info("The developer asks for help when debugging the code. Regenerating the code.")
                         retry_flag = True
                 elif not error_flag:
-                    # 鍗曞厓娴嬭瘯鍒嗘敮
+                    # 单元测试分支
                     while test_round < 2 * max_tries and not error_flag:
                         logger.info(f"Start the {test_round+1}-th unit test.")
                         not_pass_flag, not_pass_information = self._conduct_unit_test(state)
@@ -149,7 +149,7 @@ class EDADeveloper(Developer):
                 error_flag = self._run_code(state, no_code_flag, path_to_run_code)
             round += 1
 
-        # 淇濆瓨鍘嗗彶
+        # 保存历史
         with open(f'{state.restore_dir}/{self.role}_history.json', 'w', encoding='utf-8') as f:
             json.dump(history, f, ensure_ascii=False, indent=4)
         with open(f'{state.restore_dir}/debug_history.json', 'w', encoding='utf-8') as f:

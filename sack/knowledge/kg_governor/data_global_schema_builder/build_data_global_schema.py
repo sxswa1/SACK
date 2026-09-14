@@ -288,7 +288,7 @@ class DataGlobalSchemaBuilder:
             membership_triples.append(Triplet(competition_node, RDFResource('type', self.ontology['rdf']),
                                               RDFResource('Dataset', self.ontology['sack_knowledge'], False)))
 
-            # 娣诲姞绔炶禌鐨刼verview鍜宒ata_description
+            # 添加竞赛的overview和data_description
             if competition_metadata.get('overview'):
                 membership_triples.append(
                     Triplet(competition_node, RDFResource('hasOverview', self.ontology['sackData']),
@@ -344,7 +344,7 @@ class DataGlobalSchemaBuilder:
                 field_mapping = self.eda_field_mapping.get(eda_type, {})
                 for (module, field_path), (storage_attr, field_type) in field_mapping.items():
                     try:
-                        # 鏍规嵁EDA绫诲瀷鑾峰彇妯″潡鏁版嵁
+                        # 根据EDA类型获取模块数据
                         if eda_type == "pre_eda":
                             if module == "data_quality":
                                 module_data = eda_profile.get_pre_eda_data_quality()

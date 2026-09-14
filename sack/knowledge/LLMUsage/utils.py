@@ -61,7 +61,7 @@ def read_image(prompt, image_path):
 
 
 def parse_json_from_response(raw_reply: str) -> Dict[str, Any]:
-    """浠庡ぇ妯″瀷鍝嶅簲涓彁鍙栧拰瑙ｆ瀽JSON鍐呭"""
+    """从大模型响应中提取并解析 JSON 内容"""
 
     def try_json_loads(data: str) -> Dict[str, Any]:
         try:
@@ -82,7 +82,7 @@ def parse_json_from_response(raw_reply: str) -> Dict[str, Any]:
         if reply is not None:
             return reply
 
-    # 濡傛灉娌℃湁浠ｇ爜鍧楋紝灏濊瘯鍖归厤鏁翠釜鍝嶅簲涓殑JSON瀵硅薄
+    # 若没有代码块，尝试将整个响应解析为 JSON 对象。
     json_match = re.search(r'\{.*\}', raw_reply, re.DOTALL)
     if json_match:
         reply_str = json_match.group(0).strip()
@@ -90,7 +90,7 @@ def parse_json_from_response(raw_reply: str) -> Dict[str, Any]:
         if reply is not None:
             return reply
 
-    # 濡傛灉鎻愬彇澶辫触锛岃繑鍥炵┖瀛楀吀
+    # 如果提取失败，返回空字典
     logging.error("Failed to parse JSON from response")
     return {}
 

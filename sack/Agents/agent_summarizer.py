@@ -78,7 +78,7 @@ class Summarizer(Agent): # 阶段性总结工作 为下一个阶段提供见解
 
         return insight_from_visualization
 
-    def _generate_research_report(self, state: State) -> str: # 鍚勪釜闃舵report姹囨€绘垚绔炶禌鐮旂┒鎶ュ憡
+    def _generate_research_report(self, state: State) -> str: # 汇总各阶段报告，形成竞赛研究报告。
         previous_dirs = ['pre_eda', 'data_cleaning', 'deep_eda', 'feature_engineering', 'model_build_predict']
         previous_report = ""
         for dir in previous_dirs:
@@ -86,9 +86,9 @@ class Summarizer(Agent): # 阶段性总结工作 为下一个阶段提供见解
                 with open(f'{state.competition_dir}/{dir}/report.txt', 'r', encoding='utf-8') as f:
                     report = f.read()
                     previous_report += f"## {dir.replace('_', ' ').upper()} ##\n{report}\n"
-        # round 0 鎬荤粨鍚勪釜闃舵report 鏄惧紡瑕佹眰涓€浜涙€荤粨瀛楁 鎸夐樁娈垫€荤粨 markdown杈撳嚭  浣嗛渶瑕佸厛璇锋眰鍚勯樁娈祌eport
+        # Round 0：请求各阶段报告，并明确汇总的格式要求。
         _, research_report_history = self.llm.generate(PROMPT_SUMMARIZER_RESEARCH_REPORT, [], max_completion_tokens=4096)
-        # round 1 鎷垮埌鎶ュ憡寮€濮嬫€荤粨 鏈€缁坢arkdown杈撳嚭
+        # Round 1：读取报告并开始汇总，最终输出 Markdown。
         raw_research_report, research_report_history = self.llm.generate(previous_report, research_report_history, max_completion_tokens=4096)
         try:
             research_report = self._parse_markdown(raw_research_report)
@@ -113,11 +113,11 @@ class Summarizer(Agent): # 阶段性总结工作 为下一个阶段提供见解
             state_info+= PROMPT_DATA_PREPARATION_SUPPLEMENT
 
         with open(f'{state.restore_dir}/markdown_plan.txt', 'r',encoding='utf-8') as f:
-            plan = f.read() # 璇诲彇plan
+            plan = f.read() # 读取plan
 
         # Design questions 通过提出问题 然后回答的方式 对当前阶段的过程进行总结 进而为下一阶段提供指导
         design_questions_history = []
-        next_phase_name = state.get_next_phase() # 鑾峰彇涓嬩竴涓樁娈靛悕
+        next_phase_name = state.get_next_phase() # 获取下一阶段名称。
         # round 0 提供竞赛的基本上下文背景（包括竞赛名以及涉及的阶段） 当前阶段 以及下一个阶段  要求设计出6个最值得关注且对下一阶段最有帮助的关键问题。  但首先需要请求数据集信息、阶段背景信息、plan（这个阶段做了什么确实用plan最直观）
         input = PROMPT_SUMMARIZER_DESIGN_QUESITONS.format(phases_in_context=state.context, phase_name=state.phase, next_phase_name=next_phase_name)
         _, design_questions_history = self.llm.generate(input, design_questions_history, max_completion_tokens=4096)
@@ -143,10 +143,10 @@ class Summarizer(Agent): # 阶段性总结工作 为下一个阶段提供见解
             # if len(output) > 1000: # if the output is too long, truncate it
             #     output = output[:1000]
         with open(f'{state.restore_dir}/review.json', 'r', encoding='utf-8') as f:
-            review = json.load(f) # reviewer缁欏嚭鐨剆core鍜宻uggestion
+            review = json.load(f) # reviewer给出的score和suggestion
 
         answer_questions_history = []
-        # round 0 鎻愪緵绔炶禌鐨勫熀鏈笂涓嬫枃 褰撳墠闃舵 浠ュ強闂  瑕佸杩欎簺闂鍥炵瓟   浣嗛鍏堥渶瑕佽姹傛暟鎹泦淇℃伅銆乸lan銆乧ode銆佷箣鍓嶈緭鍑虹殑涓€浜涘浘鍍忎俊鎭€乺eview
+        # Round 0：收集数据、计划、代码、图像和审核意见，回答报告问题。
         input = PROMPT_SUMMARIZER_ANSWER_QUESTIONS.format(phases_in_context=state.context, phase_name=state.phase, questions=questions)
         _, answer_questions_history = self.llm.generate(input, answer_questions_history, max_completion_tokens=4096)
         # round 1 填充信息 开始回答问题
@@ -155,7 +155,7 @@ class Summarizer(Agent): # 阶段性总结工作 为下一个阶段提供见解
         answer_questions_reply, answer_questions_history = self.llm.generate(input, answer_questions_history, max_completion_tokens=4096)
         with open(f'{state.restore_dir}/answer_questions_reply.txt', 'w', encoding='utf-8') as f:
             f.write(answer_questions_reply)
-        # round 2 鎶婇棶棰樺拰鍥炵瓟缁勭粐鎴恗arkdown 浣滀负report
+        # round 2 把问题和回答组织成markdown 作为report
         input = PROMPT_SUMMARIZER_REORGANIZE_ANSWERS
         reorganize_answers_reply, answer_questions_history = self.llm.generate(input, answer_questions_history, max_completion_tokens=4096)
 

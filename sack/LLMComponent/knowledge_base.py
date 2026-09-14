@@ -11,7 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
 
-def split_sklearn(text: str, max_chunk_length: int = 8191, overlap_ratio: float = 0.1):  # 涓€涓畬鏁磗klearn宸ュ叿鎷嗗垎鎴愬涓猚hunk
+def split_sklearn(text: str, max_chunk_length: int = 8191, overlap_ratio: float = 0.1):  # 将完整的 sklearn 工具文档拆分成多个 chunk。
     if not (0 <= overlap_ratio < 1):
         raise ValueError("Overlap ratio must be between 0 and 1 (exclusive).")
     
@@ -24,7 +24,7 @@ def split_sklearn(text: str, max_chunk_length: int = 8191, overlap_ratio: float 
         end = min(start + max_chunk_length, len(text))
         chunk = text[start:end]
         chunks.append(chunk)
-        start += max_chunk_length - overlap_length # 姣忎釜chunk鍙敤鐨勫彧鏈塵ax_chunk_length - overlap_length闀垮害
+        start += max_chunk_length - overlap_length # 每个 chunk 的有效前进长度为 max_chunk_length - overlap_length。
         
     return chunks
 
@@ -45,7 +45,7 @@ class KnowledgeBase:
         self.embedding_model = embedding_model
         self.id = 0 # the id of the data in the collection
         
-    def insert_vectors(self, chunks: list, doc_name: str): # collection娣诲姞鍐呭
+    def insert_vectors(self, chunks: list, doc_name: str): # 向 collection 添加内容。
         results = chunks
         # insert the vectors into the collection
         for result in tqdm(results):
@@ -82,7 +82,7 @@ class KnowledgeBase:
         )
         return results
     
-    def check_collection_none(self): # 杩斿洖collection鍐卍oc涓暟
+    def check_collection_none(self): # 返回 collection 内的文档。
         document_count = self.collection.count()
         if document_count == 0:
             print("The collection is empty.")

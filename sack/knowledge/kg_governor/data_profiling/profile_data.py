@@ -117,7 +117,7 @@ def profile_data():
         SACKKnowledgeConfig.spark_executor_mem_overhead = "1g"
         spark_conf = SparkConf()
         spark_conf.setMaster(f'local[{SACKKnowledgeConfig.spark_n_workers}]')
-        spark_conf.setExecutorEnv("PYTHONPATH", str(Path(SACKKnowledgeConfig.base_dir).parent))  # sack_knowledge鐨勭埗鐩綍
+        spark_conf.setExecutorEnv("PYTHONPATH", str(Path(SACKKnowledgeConfig.base_dir).parent))  # sack_knowledge 的父目录。
         spark_conf.set('spark.driver.memory', f'{SACKKnowledgeConfig.spark_max_memory // 2}g')
         spark_conf.set('spark.python.worker.memory', '400m')
         spark_conf.set('spark.executor.memoryOverhead', SACKKnowledgeConfig.spark_executor_mem_overhead)
@@ -144,7 +144,7 @@ def profile_data():
         spark.addFile(os.path.join(SACKKnowledgeConfig.base_dir, 'embeddings', 'cc.en.300.bin'))
 
 
-    # 鍔犺浇fasttext妯″瀷鐢ㄤ簬绔炶禌鍏冩暟鎹殑宓屽叆鐢熸垚锛堝湪Driver绔級
+    # 在 Driver 端加载 FastText 模型，生成竞赛元数据嵌入。
     fasttext_model_path = os.path.join(SACKKnowledgeConfig.base_dir, 'embeddings', 'cc.en.300.bin')
     if not os.path.exists(fasttext_model_path):
         raise FileNotFoundError(
@@ -161,7 +161,7 @@ def profile_data():
         text_vector = np.mean(word_vectors, axis=0)
         return text_vector.tolist()
 
-    # 澶勭悊绔炶禌鍏冩暟鎹細璇诲彇overview.txt鍜宒ata_description.txt骞朵繚瀛樹负JSON
+    # 读取 overview.txt 和 data_description.txt，生成竞赛元数据 JSON。
     competition_profile_base_dir = os.path.join(SACKKnowledgeConfig.profiles_out_path, 'competition_profiles')
     eda_profile_base_dir = os.path.join(SACKKnowledgeConfig.profiles_out_path, 'eda_insight_profiles')
     os.makedirs(competition_profile_base_dir, exist_ok=True)
@@ -255,15 +255,15 @@ def profile_data():
                 competition_profile.save_profile(competition_profile_base_dir)
                 print(f"Saved competition profile: {dataset} (MD5: {competition_md5})")
 
-            # EDAInsight鑾峰彇
+            # EDAInsight获取
             # 4. 保存EDA Profile
 
             eda_paths = {
-                "pre_eda": os.path.join(SACKKnowledgeConfig.history_edainsight_base_path, dataset, "pre_insight_extraction/eda_insight.json"), # 鐩存帴浠庢暟鎹簮鑾峰彇edainsight
+                "pre_eda": os.path.join(SACKKnowledgeConfig.history_edainsight_base_path, dataset, "pre_insight_extraction/eda_insight.json"), # 直接从数据目录获取 EDAInsight。
                 "deep_eda": os.path.join(SACKKnowledgeConfig.history_edainsight_base_path, dataset, "deep_insight_extraction/eda_insight.json")
             }
 
-            # 2. 閬嶅巻涓ょEDA绫诲瀷锛岃鍙栨枃浠跺苟鍒涘缓Profile
+            # 遍历两类 EDA 文件并创建 Profile。
             for eda_type, eda_file_path in eda_paths.items():
                 eda_id = f"{competition_id}_{eda_type}"
                 eda_id_md5 = hashlib.md5(eda_id.encode()).hexdigest()
@@ -273,11 +273,11 @@ def profile_data():
                 else:
                     if os.path.exists(eda_file_path) and os.path.getsize(eda_file_path) > 0:
                         try:
-                            # 璇诲彇鏂版ā鏉跨殑EDA JSON
+                            # 读取新模板的EDA JSON
                             with open(eda_file_path, 'r', encoding='utf-8') as f:
                                 eda_json = json.load(f)
 
-                            # 3. 鎸塃DA绫诲瀷鍒濆鍖朠rofile
+                            # 按 EDA 类型初始化 Profile。
                             if eda_type == "pre_eda":
                                 pre_eda_data = eda_json
                                 eda_profile = EDAInsightProfile(
@@ -299,7 +299,7 @@ def profile_data():
                                     deep_eda_special_scenarios=deep_eda_data.get("special_scenarios", {})
                                 )
 
-                            # 4. 淇濆瓨EDA Profile
+                            # 4. 保存EDA Profile
                             eda_profile.save_profile(eda_profile_base_dir)
                             print(f"Successfully saved {eda_type} EDA profile for dataset: {dataset}")
 

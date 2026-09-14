@@ -38,7 +38,7 @@ class EDAPlanner(Planner):
         if len(state.memory) == 1:  # 第一阶段执行
             history.append({"role": "system", "content": f"{role_prompt}{self.description}"})
 
-            # Round 0 - 鍩虹瑙勫垝
+            # Round 0：制定基础计划。
             task = PROMPT_PLANNER_TASK.format(phase_name=state.phase)
             user_rules = state.generate_rules()
 
@@ -54,7 +54,7 @@ class EDAPlanner(Planner):
             _, history = self.llm.generate(input, history, max_completion_tokens=4096)
 
             # Round 1 - 提供历史信息和工具
-            previous_plan, previous_report = self._get_previous_plan_and_report(state)  # 杩欓噷鑾峰彇鐨勬槸background understand闃舵 鍥犳娌℃湁鍐呭
+            previous_plan, previous_report = self._get_previous_plan_and_report(state)  # 读取 Understand Background 阶段的输出；该阶段没有内存记录。
             input = f"# PREVIOUS PLAN #\n{previous_plan}\n#############\n# PREVIOUS REPORT #\n{previous_report}\n"
             input += self._read_data(state, num_lines=1)
 
@@ -69,14 +69,14 @@ class EDAPlanner(Planner):
             with open(f'{state.restore_dir}/raw_plan_reply.txt', 'w', encoding='utf-8') as f:
                 f.write(raw_plan_reply)
 
-            # Round 2 - 缁勭粐涓篗arkdown鏍煎紡
+            # Round 2 - 组织为Markdown格式
             input = PROMPT_PLNNAER_REORGANIZE_IN_MARKDOWN
             organized_markdown_plan, history = self.llm.generate(input, history, max_completion_tokens=4096)
             markdown_plan = self._parse_markdown(organized_markdown_plan)
             with open(f'{state.restore_dir}/markdown_plan.txt', 'w', encoding='utf-8') as f:
                 f.write(markdown_plan)
 
-            # Round 3 - 缁勭粐涓篔SON鏍煎紡
+            # Round 3 - 组织为JSON格式
             input = PROMPT_PLNNAER_REORGANIZE_IN_JSON
             raw_json_plan, history = self.llm.generate(input, history, max_completion_tokens=4096)
             try:
@@ -87,14 +87,14 @@ class EDAPlanner(Planner):
             with open(f'{state.restore_dir}/json_plan.json', 'w', encoding='utf-8') as f:
                 json.dump(json_plan, f, ensure_ascii=False, indent=4)
 
-        else:  # 鍚庣画杞
+        else:  # 后续
             last_planner_score = state.memory[-2].get("reviewer", {}).get("score", {}).get("agent planner", 0)
             if last_planner_score >= 3:
                 return {"planner": state.memory[-2]["planner"]}
             else:
                 return {"planner": state.memory[-2]["planner"]}
 
-        # 淇濆瓨鍘嗗彶
+        # 保存历史
         with open(f'{state.restore_dir}/{self.role}_history.json', 'w', encoding='utf-8') as f:
             json.dump(history, f, ensure_ascii=False, indent=4)
 
@@ -118,7 +118,7 @@ class EDAPlanner(Planner):
                 with open(f'{state.restore_dir}/markdown_plan.txt', 'r', encoding='utf-8') as f:
                     markdown_plan = f.read()
 
-        # 杩斿洖缁撴灉
+        # 返回结果
         plan = markdown_plan
         result = markdown_plan
 

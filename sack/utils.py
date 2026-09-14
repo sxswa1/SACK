@@ -13,11 +13,11 @@ def load_config(file_path: str):
 def set_config(file_path: str, field_name: str, field_value):
     """
     """
-    # 1. 鏍￠獙鏂囦欢鏍煎紡锛堝拰load_config淇濇寔涓€鑷达級
+    # 1. 校验文件格式，与 load_config 保持一致。
     assert file_path.endswith('json'), "The configuration file should be in JSON format."
 
     try:
-        # 2. 璇诲彇鍘熸湁閰嶇疆锛堟枃浠朵笉瀛樺湪鍒欏垵濮嬪寲绌哄瓧鍏革級
+        # 2. 读取原有配置（文件不存在则初始化空字典）
         if os.path.exists(file_path):  # 若文件不存在，初始化空字典
             config = load_config(file_path)
         else:
@@ -28,7 +28,7 @@ def set_config(file_path: str, field_name: str, field_value):
 
         # 4. 将修改后的配置写回文件（格式化写入，ensure_ascii=False支持中文）
         with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(config, f, indent=4, ensure_ascii=False)  # indent=4缂╄繘鏍煎紡鍖栵紝ensure_ascii=False鏀寔涓枃
+            json.dump(config, f, indent=4, ensure_ascii=False)  # 使用 indent=4 格式化，并用 ensure_ascii=False 保留中文。
         print(f"閰嶇疆淇敼鎴愬姛锛氬瓧娈礫{field_name}]宸茶缃负[{field_value}]锛屾枃浠惰矾寰勶細{file_path}")
 
     except FileNotFoundError:
@@ -67,7 +67,7 @@ def multi_chat(api_handler: APIHandler, prompt, history=None, max_completion_tok
     settings = APISettings(max_completion_tokens=max_completion_tokens)
     reply = api_handler.get_output(messages=messages, settings=settings,enable_thinking=enable_thinking)
 
-    # 璁板繂鏇存柊
+    # 记忆更新
     history.append({'role': 'user', 'content': prompt})
     history.append({'role': 'assistant', 'content': reply})
 

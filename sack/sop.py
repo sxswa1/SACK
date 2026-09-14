@@ -115,7 +115,7 @@ class SOP:
             return "Repeat", self._create_repeat_state(state)
         elif state.score >= 3:  # 切换下一个阶段
             if self.config['use_mode'] == "GetEDAInsight" and state.phase == "IEDA Insight Extraction":
-                return "Complete", None  # eda鑾峰彇缁撴潫
+                return "Complete", None  # eda获取结束
             else:
                 next_phase = self.get_next_phase(state.phase)
                 return "Success", State(phase=next_phase, competition=self.competition, use_mode=self.config['use_mode'])

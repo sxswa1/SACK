@@ -14,7 +14,7 @@ from sack.state import State
 from sack.utils import load_config
 from sack.Prompts.prompt_unit_test import *
 
-class TestTool:  # 鎵€鏈夊崟鍏冩祴璇曠殑鍑芥暟閮藉畾涔夊湪杩欓噷
+class TestTool:  # 所有单元测试函数都定义在这里。
     def __init__(
         self, 
         tools_kb: KnowledgeBase = None,
@@ -29,9 +29,9 @@ class TestTool:  # 鎵€鏈夊崟鍏冩祴璇曠殑鍑芥暟閮藉畾涔夊湪�
 
     def execute_tests(self, state: State): # 执行单元测试
         not_pass_tests = []
-        test_function_names = state.phase_to_unit_tests[state.phase]  # 鍗曞厓娴嬭瘯鏄汉宸ュ畾涔夌殑
+        test_function_names = state.phase_to_unit_tests[state.phase]  # 按人工定义的测试列表执行单元测试。
         for func_name in test_function_names:
-            if hasattr(self, func_name): # if the function exists 鏄惁鏈塻elf.func_name 杩欎釜鍑芥暟
+            if hasattr(self, func_name): # 如果存在 self.func_name 对应的函数。
                 func = getattr(self, func_name)
                 result = func(state) # return execution result, test number, test information
                 if not result[0]: # if the test failed
@@ -62,13 +62,13 @@ class TestTool:  # 鎵€鏈夊崟鍏冩祴璇曠殑鍑芥暟閮藉畾涔夊湪�
             # Check for the existence of submission.csv
             required_files = ["submission.csv"]
             missing_files = [file for file in required_files if file not in files]
-            if not missing_files: # 涓嶅瓨鍦╩issing灏辨槸鑳藉湪绔炶禌鏂囦欢澶逛笅鎵惧埌submission
+            if not missing_files: # 不存在missing就是能在竞赛文件夹下找到submission
                 return True, 2, "submission.csv exists"
             else:
                 return False, 2, f"Missing files: {', '.join(missing_files)}, it should be saved in {state.competition_dir}/"
 
         
-        elif state.phase == "Data Cleaning": # 鏁版嵁娓呯悊鐨勮緭鍑烘槸娓呯悊鍚庣殑鏁版嵁csv
+        elif state.phase == "Data Cleaning": # 数据清理的输出是清理后的数据csv
             # Check for the existence of cleaned_train and cleaned_test
             required_files = ["cleaned_train.csv", "cleaned_test.csv"]
             missing_files = [file for file in required_files if file not in files]
@@ -78,7 +78,7 @@ class TestTool:  # 鎵€鏈夊崟鍏冩祴璇曠殑鍑芥暟閮藉畾涔夊湪�
             else:
                 return False, 2, f"Missing files: {', '.join(missing_files)}, it should be saved in {state.competition_dir}/"
         
-        elif state.phase == "Feature Engineering": # 鐗瑰緛宸ョ▼闃舵鐨勮緭鍑烘槸澶勭悊鍚庣殑csv
+        elif state.phase == "Feature Engineering": # 特征工程阶段的输出是处理后的 CSV。
             # Check for the existence of processed_train and processed_test
             required_files = ["processed_train.csv", "processed_test.csv"]
             missing_files = [file for file in required_files if file not in files]
@@ -485,7 +485,7 @@ Here is the information about the features of processed_test.csv:
             path = f"{state.competition_dir}/deep_eda/images"
         else:
             return True, 24, "No need to check the number of images at this stage, please continue to the next step of the process"
-            # 閬嶅巻鎸囧畾鐩綍
+            # 遍历指定文件。
         for entry in os.scandir(path):
             if entry.is_file() and entry.name.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tiff')):
                 image_count += 1
@@ -529,9 +529,9 @@ Here is the information about the features of processed_test.csv:
 
     
     def test_submission_validity(self, state: State):
-        # 妫€鏌ubmission.csv鍜宻ample_submission.csv鐨勭涓€涓垪鏄惁鐩稿悓
-        # 妫€鏌ubmission.csv鐨勬暟鍊兼槸鍚﹀湪sample_submission.csv鐨勬暟鍊艰寖鍥村唴
-        # 瑕佷繚璇佹湁submission.csv鐢熸垚
+        # 检查 submission.csv 与 sample_submission.csv 的列是否相同。
+        # 检查 submission.csv 的数值是否在预期范围内。
+        # 要保证有submission.csv生成
         path_sample = f"{state.competition_dir}/sample_submission.csv"
         path_submission = f"{state.competition_dir}/submission.csv"
         
@@ -546,7 +546,7 @@ Here is the information about the features of processed_test.csv:
         df_submission.to_csv(path_submission, index=False)
 
         unique_values = df_submission.iloc[:, 1].unique()
-        if set(unique_values) == {0, 1} or set(unique_values) == {False, True} or set(unique_values) == {0.0, 1.0}:  # 绂绘暎鏍囩
+        if set(unique_values) == {0, 1} or set(unique_values) == {False, True} or set(unique_values) == {0.0, 1.0}:  # 离散标签。
             result = "Valid"
             return True, 29, "submission.csv is valid."
 
@@ -779,7 +779,7 @@ Id,SalePrice
             if 'id' not in df.columns:
                 invalid_files.append(f"{file_name} (missing 'id' column)"+return_preview)
                 continue
-            # 妫€鏌D鍒楁槸鍚︿负鏁存暟绫诲瀷
+            # 检查 ID 列是否为整数类型。
             if not pd.api.types.is_integer_dtype(df['id']):
                 invalid_files.append(f"{file_name} (non-integer 'id' column)"+return_preview)
                 continue
@@ -818,7 +818,7 @@ Id,SalePrice
         test_df = pd.read_csv(f"{state.competition_dir}/test.csv")
         submission_df = pd.read_csv(f"{state.competition_dir}/sample_submission.csv")
 
-        train_features = set(test_df.columns)  # 鍋囪娴嬭瘯闆嗙殑鎵€鏈夊垪閮芥槸鐗瑰緛
+        train_features = set(test_df.columns)  # 假设测试集的所有列都是特征。
         train_targets = set(train_df.columns) - train_features
 
         if not train_targets:
@@ -840,18 +840,18 @@ Id,SalePrice
         test_df = pd.read_csv(f"{state.competition_dir}/test.csv")
         submission_df = pd.read_csv(f"{state.competition_dir}/sample_submission.csv")
 
-        # 鑾峰彇鐩爣鍒楋紙鎻愪氦鏂囦欢涓櫎id澶栫殑鍒楋級
+        # 获取目标列，即提交文件中除 ID 外的列。
         target_columns = set(submission_df.columns) - {'id'}
 
-        # 鑾峰彇璁粌闆嗗拰娴嬭瘯闆嗙殑鎵€鏈夊垪
+        # 获取训练集和测试集的所有列。
         train_columns = set(train_df.columns)
         test_columns = set(test_df.columns)
 
-        # 璁＄畻宸紓
+        # 计算差集。
         test_only_columns = test_columns - train_columns
         train_only_columns = train_columns - test_columns
 
-        # 妫€鏌ユ祴璇曢泦鏄惁鏈夊啑浣欏垪
+        # 检查测试集是否有多余的列。
         if test_only_columns:
             return False, 45, f"Test file contains redundant columns: {', '.join(test_only_columns)}"
 
@@ -942,7 +942,7 @@ Id,SalePrice
                     header_details[file] = header_candidates
 
             except Exception as e:
-                continue  # 蹇界暐鏂囦欢璇诲彇寮傚父
+                continue  # 忽略文件读取异常
 
         if multi_header_files:
             details = ", ".join([f"{file}({len(header_details[file])} rows: {header_details[file]})"

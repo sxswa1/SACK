@@ -30,7 +30,7 @@ class Reviewer(Agent):
             key_mapping = {
                 "reader": "agent reader"
             }
-        else: # 鍏朵粬鎯呭喌鐨勫墠椹辨槸planner鍜宒eveloper
+        else: # 其他情况的前驱是planner和developer
             key_mapping = {
                 "planner": "agent planner",
                 "developer": "agent developer"
@@ -46,7 +46,7 @@ class Reviewer(Agent):
                     suggestions = {}
                 if not isinstance(scores, dict):
                     scores = {}
-                for key in suggestions: # 鎵惧埌褰撳墠agent鐨剆uggestion
+                for key in suggestions: # 找到当前agent的suggestion
                     normalized_key = key.lower()
                     for k, v in key_mapping.items():
                         if k in normalized_key:
@@ -72,7 +72,7 @@ class Reviewer(Agent):
                 "Reviewer output could not be parsed into the expected schema. Please regenerate this stage."
             )
         
-        return merged_dict # 鎵€鏈塧gent淇℃伅鍚堝苟鍚庣殑dict
+        return merged_dict # 合并所有 Agent 信息后的字典。
 
     def _generate_prompt_for_agents(self, state: State) -> List[str]:
         prompt_for_agents = []
@@ -104,7 +104,7 @@ class Reviewer(Agent):
             # round=1 注入某个agent评估所需的语料（这个agent的定义职能以及io） 可以开始评估 评估分数1~5 并给出建议
             input = prompt_for_agents[agent_id]
             raw_reply, history = self.llm.generate(input, history, max_completion_tokens=4096)
-            # round=2 杩斿洖缁撴灉鎻愬彇鎴恓son
+            # round=2 返回结果提取成json
             input = PROMPT_REVIEWER_ROUND2
             raw_reply, history = self.llm.generate(input, history, max_completion_tokens=4096)
             all_raw_reply.append(raw_reply)
@@ -126,7 +126,7 @@ class Reviewer(Agent):
         with open(f'{state.restore_dir}/{self.role}_reply.txt', 'w',encoding="utf-8") as f:
             f.write("\n\n\n".join(all_raw_reply))
 
-        review = self._merge_dicts(all_reply, state)  # 澶氫釜agent鐨剆uggestion銆乻core鍚堝苟
+        review = self._merge_dicts(all_reply, state)  # 多个agent的suggestion、score合并
         final_score = review['final_score']
         final_suggestion = review['final_suggestion']
         # developer code execution failed, score is 0      human-in-the-loop 强制修改分数和建议

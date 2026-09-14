@@ -12,7 +12,7 @@ from sack.state import State
 from sack.utils import load_config
 from sack.Prompts.prompt_developer import *
 
-class DebugTool: # 璋冭瘯宸ュ叿
+class DebugTool: # 调试工具
     def __init__(
         self,
         model: str = 'qwen3-coder-plus',
@@ -23,22 +23,22 @@ class DebugTool: # 璋冭瘯宸ュ叿
     # 带着代码运行错误来调试，让llm根据错误信息定位错误段
     def debug_code_with_error(self, state: State, all_error_messages: list, output_messages: str, previous_code: str, wrong_code: str, error_messages: str, tools: str, tool_names: list) -> str:
         debug_times = len(all_error_messages)
-        logger.info(f"Debug times: {debug_times}") # debug娆℃暟
+        logger.info(f"Debug times: {debug_times}") # debug次数
 
-        single_round_debug_history = [] # 淇濆瓨debug杩囩▼
+        single_round_debug_history = [] # 保存debug过程
         # locate error 提示拿着error信息寻找错误代码片段（只需要定位归因  不修正）
-        input = PROMPT_DEVELOPER_DEBUG_LOCATE.format(  # 鎻愪緵涔嬪墠鐨勪唬鐮侊紝褰撳墠閿欒浠ｇ爜锛岄敊璇俊鎭互鍙婁唬鐮佺殑杈撳嚭
+        input = PROMPT_DEVELOPER_DEBUG_LOCATE.format(  # 提供之前的代码、当前出错代码、错误信息和代码输出。
             previous_code=previous_code,
             wrong_code=wrong_code,
             error_messages=error_messages,
             output_messages=output_messages
         )
 
-        # 杩欓噷涓轰粈涔堣寮鸿鎷嗘垚瑕佸伐鍏峰啀瀹氫綅閿欒鐨勪袱姝ユ搷浣滐紵
+        # 先提供代码与错误，再提供工具描述以定位错误。
         _, locate_history = self.llm.generate(input, [], max_completion_tokens=40960)
-        input = f"# TOOL DESCRIPTIONS #\n{tools}" # 鎻愪緵宸ュ叿
-        locate_reply, locate_history = self.llm.generate(input, locate_history, max_completion_tokens=40960) # 瀹氫綅閿欒
-        single_round_debug_history.append(locate_history) # 瀹氫綅杩囩▼鐨刴emory淇濆瓨
+        input = f"# TOOL DESCRIPTIONS #\n{tools}" # 提供工具
+        locate_reply, locate_history = self.llm.generate(input, locate_history, max_completion_tokens=40960) # 定位错误。
+        single_round_debug_history.append(locate_history) # 定位过程的memory保存
         with open(f'{state.restore_dir}/debug_locate_error.txt', 'w',encoding="utf-8") as f:
             f.write(locate_reply)
 
@@ -53,7 +53,7 @@ class DebugTool: # 璋冭瘯宸ュ叿
             with open(f'{state.restore_dir}/debug_ask_for_help.txt', 'w',encoding="utf-8") as f:
                 f.write(help_reply)
             if any(keyword in help_reply for keyword in ["<HELP>", "</HELP>", "I need help", "need help"]):
-                return "HELP", single_round_debug_history  # 濡傛灉鍒ゆ柇涓洪渶瑕佸府鍔╋紝灏辨棤闇€鍚庣画鐨勪慨澶嶉敊璇紝鐩存帴杩斿洖
+                return "HELP", single_round_debug_history  # 如果判断需要帮助，就跳过后续修复并直接返回。
 
         # extract code
         pattern = r"```python(.*?)```"
@@ -79,7 +79,7 @@ class DebugTool: # 璋冭瘯宸ュ叿
         correct_code_matches = re.findall(pattern, fix_reply, re.DOTALL)
         code_snippet_after_correction = correct_code_matches[-1]
 
-        # merge code  鎻愪緵閿欒浠ｇ爜锛岄敊璇唬鐮佹锛屼慨姝ｅ悗鐨勪唬鐮佹  鎶婁唬鐮佹鏇挎崲鍒板師閿欒浠ｇ爜浣嶇疆
+        # 合并代码：用修正后的代码块替换原代码中出错的位置。
         input = PROMPT_DEVELOPER_DEBUG_MERGE.format(
             wrong_code=wrong_code,
             most_relevant_code_snippet=most_relevant_code_snippet,

@@ -18,7 +18,7 @@ class ImageToTextTool:
         self.llm = LLM(model, type)
         self.kb = tools_kb
 
-    def image_to_text(self, state: State, chosed_images: List[str]): # 鍙湁鏁版嵁鍒嗘瀽鏃朵細鐢熸垚鍙鍖栧浘
+    def image_to_text(self, state: State, chosed_images: List[str]): # 数据分析阶段会生成可视化图像。
         input = """Please read this data analysis image and give me a detailed description of it.
                 You should describe the image in detail, including the data, the distribution, the relationship between variables, etc.
                 And you should also give me some insights based on the image."""

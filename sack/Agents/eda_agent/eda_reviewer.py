@@ -29,7 +29,7 @@ class EDAReviewer(Reviewer):
         evaluated_agents = list(state.memory[-1].keys())
         print(f"Evaluating agents: {evaluated_agents}")
 
-        tools, tool_names = self._get_tools(state)  # 澶嶇敤Agent鐖剁被鐨刜get_tools鏂规硶
+        tools, tool_names = self._get_tools(state)  # 复用Agent父类的_get_tools方法
         tool_context = f"""
         # AVAILABLE EDA TOOLS IN CURRENT PHASE #
         ## Tool List ##
@@ -74,7 +74,7 @@ class EDAReviewer(Reviewer):
         history.append({"role": "system", "content": enhanced_role_prompt})
 
         for agent_id in range(len(prompt_for_agents)):
-            # 浣跨敤EDA鐗瑰畾鐨凴OUND0
+            # 使用EDA特定的ROUND0
             input = PROMPT_REVIEWER_ROUND0_EDA.format(
                 phases_in_context=state.context,
                 phase_name=state.phase
@@ -88,7 +88,7 @@ class EDAReviewer(Reviewer):
             raw_reply, history = self.llm.generate(input, history, max_completion_tokens=4096)
             all_raw_reply.append(raw_reply)
 
-        # 鍏朵綑閫昏緫淇濇寔涓嶅彉
+        # 其余逻辑保持不变
         all_reply = []
         for each_raw_reply in all_raw_reply:
             reply = self._parse_json(each_raw_reply)
@@ -97,7 +97,7 @@ class EDAReviewer(Reviewer):
             except KeyError:
                 all_reply.append(reply)
 
-        # 淇濆瓨鍘嗗彶
+        # 保存历史
         with open(f'{state.restore_dir}/{self.role}_history.json', 'w', encoding='utf-8') as f:
             json.dump(history, f, ensure_ascii=False, indent=4)
         with open(f'{state.restore_dir}/{self.role}_reply.txt', 'w', encoding="utf-8") as f:
@@ -107,7 +107,7 @@ class EDAReviewer(Reviewer):
         final_score = review['final_score']
         final_suggestion = review['final_suggestion']
 
-        # 鍘熸湁鐨勭姸鎬佹鏌ラ€昏緫
+        # 沿用原有的状态检查逻辑。
         if state.memory[-1].get("developer", {}).get("status", True) == False:
             final_score["agent developer"] = 0
             review["final_suggestion"]["agent developer"] = "The code execution failed. Please check the error message and write code again."

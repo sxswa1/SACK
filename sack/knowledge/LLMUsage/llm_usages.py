@@ -5,37 +5,37 @@ import logging
 import json
 
 def validate_and_clean_elements(elements: Dict[str, Any], schema: Dict[str, Any]) -> Dict[str, Any]:
-    """楠岃瘉鍜屾竻鐞嗘彁鍙栫殑瑕佺礌"""
+    """验证并清理提取出的要素"""
     validated = {}
 
-    # 闂绫诲瀷楠岃瘉
+    # 类型验证
     problem_type = elements.get("problem_type", "").lower()
     if problem_type in schema["problem_type"]:
         validated["problem_type"] = problem_type
     else:
         validated["problem_type"] = "other"
 
-    # 棰嗗煙楠岃瘉
+    # 领域验证
     domain = elements.get("domain", "").lower()
     if domain in schema["domain"]:
         validated["domain"] = domain
     else:
         validated["domain"] = "other"
 
-    # 璇勪环鎸囨爣楠岃瘉
+    # 评价指标验证
     metrics = elements.get("evaluation_metric", [])
     if isinstance(metrics, str):
         metrics = [metrics]
     validated["evaluation_metric"] = [m for m in metrics if m in schema["evaluation_metric"]]
 
-    # 鏁版嵁绫诲瀷楠岃瘉
+    # 数据类型验证
     data_type = elements.get("data_type", "").lower()
     if data_type in schema["data_type"]:
         validated["data_type"] = data_type
     else:
         validated["data_type"] = "other"
 
-    # 闅惧害楠岃瘉
+    # 难度验证
     difficulty = elements.get("difficulty", "").lower()
     if difficulty in schema["difficulty"]:
         validated["difficulty"] = difficulty
@@ -84,7 +84,7 @@ OUTPUT:
         history = []  # 空历史
         response_text, _ = llm.generate(prompt, history, max_completion_tokens=5000)
 
-        # 娓呯悊鍝嶅簲鏂囨湰锛屾彁鍙朖SON閮ㄥ垎
+        # 清理响应文本，提取JSON部分
         response_text = response_text.strip()
 
         # 尝试从响应中提取 JSON
@@ -110,12 +110,12 @@ OUTPUT:
 def compress_node_assignments(node_assignments: List[Dict], nodes_info_sorted: List[Dict]) -> Dict[str, List]:
     """
     压缩节点分配结果，按阶段分组，每个阶段包含多个节点块
-    杩斿洖鏍煎紡: {phase_name: [block1, block2, ...]}
+    返回格式： {phase_name: [block1, block2, ...]}
     """
     if not node_assignments:
         return {}
 
-    # 鎸塶ode_id鎺掑簭
+    # 按node_id排序
     sorted_assignments = sorted(node_assignments, key=lambda x: int(x["node_id"][1:]))
 
     # 构建 node_id 到代码片段的映射
@@ -133,7 +133,7 @@ def compress_node_assignments(node_assignments: List[Dict], nodes_info_sorted: L
         if not current_block_nodes:
             return
 
-        # 纭畾鑺傜偣鑼冨洿琛ㄧず
+        # 确认节点范围的表示。
         if len(current_block_nodes) == 1:
             node_range = current_block_nodes[0]
         else:
@@ -263,7 +263,7 @@ def analyze_node_phases(nodes: List[Dict], full_code: str) -> Tuple[Dict[str, An
             "code_snippet": node.get('text', ''),
             "node_num": node_num  # 用于排序
         })
-    # 鎸塶ode_num鎺掑簭锛堜繚璇佽妭鐐归『搴忚繛璐級
+    # 按 node_num 排序，保持节点顺序连续。
     nodes_info_sorted = sorted(nodes_info, key=lambda x: x["node_num"])
     # 移除临时排序字段
     nodes_info_sorted = [{k: v for k, v in item.items() if k != "node_num"} for item in nodes_info_sorted]
@@ -278,7 +278,7 @@ def analyze_node_phases(nodes: List[Dict], full_code: str) -> Tuple[Dict[str, An
 
     # 2. 拆分节点为每组100个
     llm = LLM(model="qwen-plus", type="api")
-    all_assignments = []  # 瀛樺偍鎵€鏈夊垎缁勭殑鏍囨敞缁撴灉
+    all_assignments = []  # 存储所有分组的标注结果。
     keep_last_n = 5
 
     task1_core_prompt = (
@@ -318,7 +318,7 @@ def analyze_node_phases(nodes: List[Dict], full_code: str) -> Tuple[Dict[str, An
                 node_id = assign["node_id"]
                 recent_assigned_nodes.append({
                     "node_id": node_id,
-                    "code_snippet": node_id_to_snippet.get(node_id, ""),  # 鍏宠仈鍘熷浠ｇ爜鐗囨
+                    "code_snippet": node_id_to_snippet.get(node_id, ""),  # 关联原始代码片段。
                     "phase": assign["phase"]  # 保留阶段信息，保证连贯性
                 })
 
@@ -367,10 +367,10 @@ def analyze_node_phases(nodes: List[Dict], full_code: str) -> Tuple[Dict[str, An
                             [item.get("node_id") for item in current_group_assignments])
                         logging.warning(f"第 {i + 1} 组标注不完整，缺失节点：{missing_ids}")
 
-                else: # 杩斿洖鍐呭鏃犳晥
+                else: # 返回内容无效。
                     logging.warning(f"第 {i + 1} 组第 {attempt + 1} 次尝试返回格式错误，重试中...")
 
-            except Exception as e:  # 妯″瀷璁块棶澶辫触
+            except Exception as e:  # 模型访问失败
                 logging.error(f"第 {i + 1} 组第 {attempt + 1} 次尝试失败: {e}")
 
         # 如果当前组失败，整个阶段失败
@@ -481,7 +481,7 @@ def core_insight_extraction(full_code: str, pipeline_structure_result: Dict, com
         merged_pipeline_info["phases"][phase_name] = {
             # 合并管道结构信息和代码片段信息
             "purpose": phase.get("purpose", ""),
-            "included_nodes": phase.get("included_nodes", []),  # 鍘嬬缉鏍煎紡
+            "included_nodes": phase.get("included_nodes", []),  # 压缩格式
             "notable_patterns": phase.get("notable_patterns", []),
             "key_activities": phase.get("key_activities", []),
             # 合并管道结构信息和代码片段信息
@@ -561,7 +561,7 @@ def core_insight_extraction(full_code: str, pipeline_structure_result: Dict, com
         except Exception as e:
             logging.error(f"第三阶段第 {attempt + 1} 次尝试失败: {e}")
 
-    # 鎵€鏈夐噸璇曢兘澶辫触
+    # 所有重试均失败。
     logging.error("第三阶段所有重试均失败")
     return None
 

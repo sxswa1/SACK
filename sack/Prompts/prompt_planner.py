@@ -47,7 +47,7 @@ INSIGHT_REFERENCE_SPEC = '''
 - If no insights are referenced, omit this notation.
 '''
 
-# 閫氱敤锛氫换鍔℃牳蹇冭绱狅紙瑙勫垝鍜岄噸缁勫潎闇€鍖呭惈鐨勫唴瀹癸級
+# 任务的通用核心要素，规划和重组都需包含。
 TASK_CORE_ELEMENTS = '''
 Each task must include:  
 - "Task": Specific action to perform (with insight references if applicable, following the insight_reference_spec).  

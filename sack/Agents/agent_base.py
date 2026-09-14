@@ -84,7 +84,7 @@ class Agent:
 
     def _read_data(self, state: State, num_lines: int = 11) -> str:  # 对数据集的信息读取,不同阶段要看阶段性产出的数据
 
-        if state.phase in ["Data Preparation"]:  # 鏁版嵁鍑嗗闃舵
+        if state.phase in ["Data Preparation"]:  # 数据准备阶段。
             rawdata_path = f'{state.competition_dir}/rawdata'
             file_path_list = []
             try:
@@ -97,7 +97,7 @@ class Agent:
             result = "#############\n# AVAILABLE FILES #\n{}".format("\n".join(file_path_list))
 
             def read_file_lines(file_path, num_lines=10):
-                """璇诲彇鏂囦欢鐨勫墠鑻ュ共琛岋紝鏀寔澶氱鏂囦欢绫诲瀷"""
+                """读取文件前几行，支持多种文件类型"""
                 file_ext = os.path.splitext(file_path)[1].lower()
                 try:
                     if file_ext == '.txt':
@@ -109,7 +109,7 @@ class Agent:
                             return lines[:100]
 
                     elif file_ext == '.xlsx' or file_ext == '.xls':
-                        # 浣跨敤pandas璇诲彇Excel鏂囦欢鐨勫墠鍑犺
+                        # 使用 pandas 读取 Excel 文件的前几行。
                         df = pd.read_excel(file_path, header=None)
                         df = df.dropna(how='all')
                         df = df.head(num_lines)
@@ -119,24 +119,24 @@ class Agent:
 
 
                     elif file_ext == '.csv':
-                        # 鍏堝皾璇昒TF-8缂栫爜
+                        # 先尝试UTF-8编码
                         try:
                             df_utf8 = pd.read_csv(file_path, nrows=num_lines, encoding='utf-8')
                             df_utf8 =  df_utf8.dropna(how='all')
-                            # 妫€鏌ユ槸鍚︽湁涔辩爜瀛楃锛堝父瑙佷贡鐮佸瓧绗︼級
+                            # 检查是否含有常见乱码字符。
                             if not df_utf8.applymap(lambda x: any(c in str(x) for c in ('�', '锟', '茂', '驴', '陆'))).any().any():
                                 tsv_data = df_utf8.to_csv(sep='\t', na_rep='nan', index=False)
                             return tsv_data.split('\n')
                         except (UnicodeDecodeError, pd.errors.ParserError):
-                            pass  # 濡傛灉鍑洪敊锛岀户缁皾璇旼BK
-                        # 鍐嶅皾璇旼BK缂栫爜
+                            pass  # 如果读取失败，继续尝试 GBK 编码。
+                        # 再尝试GBK编码
                         try:
                             df_gbk = pd.read_csv(file_path, nrows=num_lines, encoding='gbk')
                             df_gbk = df_gbk.dropna(how='all')
                             tsv_data = df_gbk.to_csv(sep='\t', na_rep='nan', index=False)
                             return tsv_data.split('\n')
                         except (UnicodeDecodeError, pd.errors.ParserError):
-                            # 涓ょ缂栫爜閮藉け璐ワ紝浣跨敤閿欒鏇挎崲绛栫暐
+                            # 两种编码均失败时，使用错误替换策略。
                             try:
                                 df = pd.read_csv(file_path, nrows=num_lines, encoding='utf-8', errors='replace')
                                 df = df.dropna(how='all')
@@ -189,7 +189,7 @@ class Agent:
                 return "".join(sample_lines)
 
             submission_columns = pd.read_csv(f'{state.competition_dir}/sample_submission.csv').columns.tolist()
-            target_columns = submission_columns[1:]  # 闄愬畾鐩爣鍙橀噺涓€瀹氭槸绗簩鍒椾箣鍚庣殑鍐呭
+            target_columns = submission_columns[1:]  # 限定目标变量在指定列后的内容中。
             result = f"\n#############\n# TARGET VARIABLE #\n{target_columns}"
             if state.phase in ["Understand Background", "Preliminary Exploratory Data Analysis", "Data Cleaning","PEDA Insight Extraction"]:
                 train_data_sample = read_sample(f'{state.competition_dir}/train.csv',
@@ -223,13 +223,13 @@ class Agent:
             raw_reply, _ = self.llm.generate(input, [], max_completion_tokens=4096)
             data_preview = self._parse_markdown(raw_reply)
         else:
-            data_preview = self._read_data(state, num_lines=num_lines) # 鏁版嵁鍑嗗闃舵鏃犻渶璁╁ぇ妯″瀷褰㈡垚鏁版嵁鍒嗘瀽锛岀洿鎺ヨ繑鍥炲彲鐢ㄦ暟鎹枃浠跺拰鏍蜂緥
+            data_preview = self._read_data(state, num_lines=num_lines) # 数据准备阶段直接返回可用数据文件和样例，无需让模型分析数据。
 
         with open(f'{state.restore_dir}/data_preview.txt', 'w',encoding='utf-8') as f:
             f.write(data_preview)
         return data_preview
 
-    def _parse_json(self, raw_reply: str) -> Dict[str, Any]:  # 鎶婂ぇ妯″瀷杩斿洖鐨刯son text 鎻愬彇鎴恓son
+    def _parse_json(self, raw_reply: str) -> Dict[str, Any]:  # 把大模型返回的json text 提取成json
         def try_json_loads(data: str) -> Dict[str, Any]:
             try:
                 return json.loads(data)
@@ -247,7 +247,7 @@ class Agent:
             if reply is not None:
                 return reply
 
-        # 濡傛灉鎻愬彇澶辫触锛屽氨杩涜json鏍煎紡閲嶇粍  閽堝涓嶅悓鍦烘櫙浣跨敤鐩稿簲鐨勬彁绀鸿瘝璁╁ぇ妯″瀷杈呭姪姝ｇ‘鎻愬彇json
+        # 如果提取失败，针对不同场景让模型重组 JSON 格式。
         logger.info(f"Failed to parse JSON from raw reply, attempting reorganization.")
         if self.role == 'developer':
             # 确保内容是字符串
@@ -278,11 +278,11 @@ class Agent:
             return reply_str
         else:
             print(self.role)
-            logging.error("Failed to parse markdown from raw reply.")  # 鏃犳硶瑙ｆ瀽markdown鏍煎紡
+            logging.error("Failed to parse markdown from raw reply.")  # 无法解析markdown格式
             # pdb.set_trace()
             return raw_reply
 
-    def _json_to_markdown(self, json_data):  # json鏍煎紡杞琺arkdown
+    def _json_to_markdown(self, json_data):  # json格式转markdown
         md_output = f"## {json_data['name']}\n\n"
         md_output += f"**Name:** {json_data['name']}  \n"
         md_output += f"**Description:** {json_data['description']}  \n"
@@ -333,7 +333,7 @@ class Agent:
                                   collection_name='eda_tools')  # 工具库（所有阶段的工具在一块）  第一次调用就把所有eda工具都创建
             memory.create_db_tools()
 
-        state_name = state.dir_name  # 褰撳墠闃舵瀵瑰簲鏂囦欢澶瑰悕
+        state_name = state.dir_name  # 当前阶段对应的文件夹名。
         with open(SACK_CONFIG_PATH, 'r', encoding='utf-8') as file:
             config = json.load(file)
         phase_to_dir = [key for key, value in config['phase_to_directory'].items() if value == state_name][0]  # 阶段名（这不是脱裤子放屁吗直接state.phase不就行吗）
@@ -348,13 +348,13 @@ class Agent:
         if self.role == 'developer' and state.phase in ['PEDA Insight Extraction','Data Cleaning','IEDA Insight Extraction',
                                                         'Feature Engineering','Model Building, Validation, and Prediction'] and len(all_tool_names) > 0:
             logger.info(f"Extracting Tools' description for developer in phase: {state.phase}")
-            with open(f'{state.restore_dir}/markdown_plan.txt', 'r', encoding='utf-8') as file:  # 闃舵瀹屾暣鍦板潃+markdown_plan.txt  涔熷氨鏄繖涓樁娈电殑plan
+            with open(f'{state.restore_dir}/markdown_plan.txt', 'r', encoding='utf-8') as file:  # 当前阶段目录下的 markdown_plan.txt，即该阶段的计划。
                 markdown_plan = file.read()  # 阶段的plan，里边有plan涉及的所有工具
             input = PROMPT_EXTRACT_TOOLS.format(document=markdown_plan,
                                                 all_tool_names=all_tool_names)  # 要求从库中检索当前阶段的plan中提到的所有可用工具
             raw_reply, _ = self.llm.generate(input, history=[], max_completion_tokens=4096)
             with open(f'{state.restore_dir}/extract_tools_reply.txt', 'w', encoding='utf-8') as file:
-                file.write(raw_reply)  # plan涓彁鍙婄殑宸ュ叿淇濆瓨鍒板綋鍓嶉樁娈佃蹇嗕笅
+                file.write(raw_reply)  # 将计划涉及的工具保存到当前阶段记忆中。
             tool_names = self._parse_json(raw_reply)['tool_names']
         else:
             tool_names = all_tool_names  # 当前阶段所有工具
@@ -371,7 +371,7 @@ class Agent:
                                                         'Data Cleaning',
                                                         'Feature Engineering',
                                                         'Model Building, Validation, and Prediction']:
-            with open(f'{state.restore_dir}/tools_used_in_{state.dir_name}.md', 'w', encoding='utf-8') as file:  # 闃舵鍦板潃涓嬭褰曡繖涓樁娈佃鍒掍娇鐢ㄧ殑宸ュ叿
+            with open(f'{state.restore_dir}/tools_used_in_{state.dir_name}.md', 'w', encoding='utf-8') as file:  # 在阶段目录下记录计划使用的工具。
                 file.write(''.join(tools))
 
         tools = ''.join(tools) if len(tool_names) > 0 else "There is no pre-defined Tools used in this phase."
@@ -416,7 +416,7 @@ class Agent:
             logging.warning("No target variable found by comparing train and test columns")
             target_variable = "Unknown"
 
-        feature_info = PROMPT_FEATURE_INFO.format(  # 鍙渶瑕佽繑鍥炶缁冮泦鐨勬暟鎹紙鐗瑰緛锛夋祦鍙樺寲
+        feature_info = PROMPT_FEATURE_INFO.format(  # 只返回训练集的数据特征变化。
             target_variable=target_variable,
             features_before=features_before,
             features_after=features_after

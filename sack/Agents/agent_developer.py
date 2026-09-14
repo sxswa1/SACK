@@ -28,7 +28,7 @@ class Developer(Agent):
         )
         self.all_error_messages = []
 
-    def _is_previous_code(self, state: State) -> Tuple[bool, str, str,str]: # 鎻愬彇涓婁竴涓樁娈碉紙鏈変唬鐮佺殑闃舵锛屼篃灏辨槸鍓旈櫎EDA锛夌殑浠ｇ爜
+    def _is_previous_code(self, state: State) -> Tuple[bool, str, str,str]: # 提取前一相关阶段的代码，跳过 EDA 阶段。
         previous_phase = state.get_previous_phase()
         previous_dir_name = state.phase_to_directory[previous_phase]
         path_to_previous_code = f'{state.competition_dir}/{previous_dir_name}/{previous_dir_name}_code.py'
@@ -38,17 +38,17 @@ class Developer(Agent):
 
     def _delete_output_in_code(self, state: State, previous_code) -> str:  # 删除所有包含绘图的for循环  以及print plt 其他绘图代码（这些代码段无法调试，需要去除后才能调试代码）
         previous_run_code = copy.deepcopy(previous_code) # deep copy to prevent modifying the original data
-        keywords = ('sns.', '.plot', '.hist', '.plt') # 缁樺浘浠ｇ爜鐨勫叧閿瘝
+        keywords = ('sns.', '.plot', '.hist', '.plt') # 绘图代码的关键词。
 
         # first scan: identify for loops, replace the whole block
         for_loop_list = []  # 所有for循环的开始和结束行索引
         in_for_loop = False
         # pdb.set_trace()
         for i, line in enumerate(previous_run_code):
-            if line.startswith('    for'): # 璇嗗埆for寰幆
+            if line.startswith('    for'): # 识别 for 循环。
                 tmp_loop = []
-                indent = line[:len(line) - len(line.lstrip())]  # get the indent part 寰楀埌缂╄繘閮ㄥ垎
-                tmp_loop.append(i) # for寰幆鐨勫紑濮嬭绱㈠紩
+                indent = line[:len(line) - len(line.lstrip())]  # 获取缩进部分。
+                tmp_loop.append(i) # 记录 for 循环的起始行索引。
                 in_for_loop = True
             elif in_for_loop and line.startswith(indent) and not line.startswith('    '+indent) and len(line.strip()) > 0:  # 跳出for循环后的一行
                 tmp_loop.append(i) # record the end line of the for loop
@@ -63,7 +63,7 @@ class Developer(Agent):
 
         # second scan: replace print and plt.show / plt.save lines, keep the indent
         start_signs = ('print', 'plt')
-        for i, line in enumerate(previous_run_code): # 鎵€鏈変唬鐮佷腑鎵€鏈夌殑print鍜宲lt浠ュ強缁樺浘鐨勪唬鐮侀兘鏇挎崲鎴恜ass
+        for i, line in enumerate(previous_run_code): # 将 print、plt 及其他绘图语句替换为 pass。
             stripped_line = line.lstrip()
             if stripped_line.startswith(start_signs) or any(keyword in stripped_line for keyword in keywords):
                 indent = line[:len(line) - len(stripped_line)]  # get the indent part
@@ -87,7 +87,7 @@ class Developer(Agent):
     def _generate_code_file(self, state: State, raw_reply) -> Tuple[bool, str, str]:  # 把返回的代码生成代码文件，里边添加了import头，并把生成的代码封装成了函数
         is_previous_code, path_to_previous_code, _, _ = self._is_previous_code(state)
         previous_tools= []
-        if is_previous_code: # 鎻愬彇浠ｇ爜涓讳綋
+        if is_previous_code: # 提取代码主体。
             with open(path_to_previous_code, 'r', encoding='utf-8') as f_1:
                 previous_code = f_1.readlines()
                 previous_code = previous_code[:-2] # delete the last two lines  这些是手动添加的execute代码段
@@ -100,8 +100,8 @@ class Developer(Agent):
                 if len(previous_tools):
                     previous_code = previous_code[8+2+len(previous_tools):] # 这些是前缀import的代码段，剩下的就是前一个阶段生成的代码  有工具就是工具数+2行
                 else:
-                    previous_code = previous_code[8+1:] # 娌℃湁宸ュ叿灏辨槸绌鸿 璁颁负1
-            previous_run_code = self._delete_output_in_code(state, previous_code) # 鍒犻櫎浜嗘墍鏈塸lt print绛夎〃绀鸿緭鍑虹殑浠ｇ爜
+                    previous_code = previous_code[8+1:] # 没有工具导入时，跳过一行空行。
+            previous_run_code = self._delete_output_in_code(state, previous_code) # 删除 plt、print 等输出代码。
         else:
             previous_code = []
             previous_run_code = []
@@ -128,7 +128,7 @@ class Developer(Agent):
             return True, "no code", "no code"
         
         with open(f'{state.restore_dir}/single_phase_code.txt', 'w',encoding="utf-8") as f: # save the single phase code
-            f.write("\n".join(matches)) # develop鐢熸垚鐨勬墍鏈変唬鐮佹淇濆瓨鍦╯ingle_phase_code.txt
+            f.write("\n".join(matches)) # 将开发智能体生成的代码保存到 single_phase_code.txt。
         tools_list = state.ml_tools.copy() # 当前阶段的工具
         import_section = ""
         if state.phase in ["Data Cleaning"]:
@@ -136,14 +136,14 @@ class Developer(Agent):
         elif state.phase in ["In-depth Exploratory Data Analysis","Feature Engineering","Model Building, Validation, and Prediction"]:
             tools_list.extend(previous_tools) 
             import_section = "from Tools.ml_tools import (\n    " + ",\n    ".join(tools_list) + ",\n)"
-        elif state.phase in ['PEDA Insight Extraction','IEDA Insight Extraction']:  # 浠呭湪GetEDAInsight瑙﹀彂eda宸ュ叿鑾峰彇
+        elif state.phase in ['PEDA Insight Extraction','IEDA Insight Extraction']:  # 仅在 GetEDAInsight 模式下获取 EDA 工具。
             import_section = "from Tools.eda_tools import (\n    " + ",\n    ".join(tools_list) + ",\n)"
             if state.phase == 'IEDA Insight Extraction':  
                 previous_import_section ="from Tools.ml_tools import (\n    " + ",\n    ".join(previous_tools) + ",\n)"# 数据清理阶段的import也要加进来
-                import_section = import_section +"\n"+ previous_import_section  # 涓や釜import鏉ヨ嚜涓嶅悓鐨刾y鏂囦欢锛屾墍浠ヨ鍒嗗紑瀵煎叆
+                import_section = import_section +"\n"+ previous_import_section  # 两个 import 片段来自不同 Python 文件，分别拼接导入。
         prefix_in_code_file = [line + '\n' for line in PREFIX_IN_CODE_FILE.format(import_section=import_section).split('\n')]
         code_with_output_lines = prefix_in_code_file + previous_code + code_lines # 拼接前一个阶段的代码和当前阶段的代码，统一放在一个函数头下组成同一个函数（保留了输出行）
-        run_code_lines = prefix_in_code_file + previous_run_code + code_lines # 鎷兼帴鍓嶄竴涓樁娈电殑鍘昏緭鍑轰唬鐮佸拰褰撳墠闃舵鐨勪唬鐮侊紝
+        run_code_lines = prefix_in_code_file + previous_run_code + code_lines # 拼接前一阶段去除输出后的代码和当前阶段代码。
 
         # Write the code to a python file
         # 把生成的可执行代码保存
@@ -182,25 +182,25 @@ class Developer(Agent):
             with open(path_to_error, 'w', encoding='utf-8') as f:
                 f.write("No code found in the reply.")
             with open(path_to_output, 'w', encoding='utf-8') as f:
-                f.write("") # 娌℃湁鎰忎箟鍟婏紵
+                f.write("") # 清空输出文件。
             return True # error_flag
 
         result = {}
         # timeout  这不是永远都会执行吗？
-        if 'Analysis' in state.phase: # EDA闃舵
+        if 'Analysis' in state.phase: # EDA 阶段。
             timeout = 1200
             timeout_info = "Your code is running out of time, please consider resource availability and reduce the number of data analysis plots drawn."
-        elif 'Model' in state.phase: # 妯″瀷鏋勫缓闃舵
+        elif 'Model' in state.phase: # 模型构建阶段。
             timeout = 28800  # 原来是2400
             timeout_info = "Your code is running out of time, please consider resource availability and try fewer models."
-        else: # 鍏朵粬闃舵
+        else: # 其他阶段。
             timeout = 3600
             timeout_info = "Your code is running out of time, please consider resource availability or other factors."
         try:
             result = subprocess.run([sys.executable, '-W', 'ignore', path_to_run_code],
                                     capture_output=True, text=True, timeout=timeout,encoding='utf-8'
                                    ) # 执行代码  preexec_fn=os.setsid适用于unix  windows似乎不需要  windows系统用python linux用python3
-        except subprocess.TimeoutExpired:  # 瓒呮椂閿欒璁板綍
+        except subprocess.TimeoutExpired:  # 记录超时错误。
             logger.info("Code execution timed out.")
             self.all_error_messages.append(timeout_info)
             with open(path_to_error, 'w', encoding='utf-8') as f:
@@ -213,7 +213,7 @@ class Developer(Agent):
                 # Negative return codes usually indicate termination by a signal
                 logger.info(f"Process was killed by signal {-e.returncode}")
                 error_message = f"Process was terminated by the operating system (signal {-e.returncode})"
-            else: # 琛ㄧず鏈夋甯搁敊璇彂鐢燂紝淇濆瓨閿欒淇℃伅
+            else: # 进程异常终止时，保存错误信息。
                 logger.info(f"Process exited with non-zero status: {e.returncode}")
                 error_message = f"Process exited with status {e.returncode}: {e.stderr}"
             self.all_error_messages.append(error_message)
@@ -295,8 +295,8 @@ class Developer(Agent):
         from sack.Tools.debug import DebugTool
 
         # prepare debug information, and then debug
-        is_previous_code, path_to_previous_code, _, path_to_last_phase_code = self._is_previous_code(state) # 涓婁竴涓樁娈电殑浠ｇ爜
-        if is_previous_code:# 濡傛灉鍓嶄竴涓樁娈垫湁浠ｇ爜
+        is_previous_code, path_to_previous_code, _, path_to_last_phase_code = self._is_previous_code(state) # 获取前一相关阶段的代码。
+        if is_previous_code:# 如果前一相关阶段有代码。
             previous_code = read_file(path_to_last_phase_code) # 上一阶段的所有代码
         else:
             previous_code = "There is no code file in the previous phase."
@@ -306,7 +306,7 @@ class Developer(Agent):
         code_lines = []
         for match in matches:
             code_lines.extend(match.split('\n'))
-        wrong_code = "\n".join(code_lines) # the code with error  閿欒浠ｇ爜 涓旀墍鏈変唬鐮佽鍚堝苟
+        wrong_code = "\n".join(code_lines) # 合并后的待调试代码。
         # read error and output
         path_to_error = f'{state.restore_dir}/{state.dir_name}_error.txt' # 当前阶段的代码错误
         path_to_output = f'{state.restore_dir}/{state.dir_name}_output.txt' # 当前阶段的输出错误代码
@@ -319,7 +319,7 @@ class Developer(Agent):
                     f.write(error_messages)
         else:
             error_messages = "There is no error message in the previous phase."
-        if state.phase in ['Feature Engineering', 'Model Building, Validation, and Prediction']: # 涓轰粈涔堣繖涓や釜闃舵璇诲彇杈撳嚭 鍏朵粬鐨勪笉璇伙紵 鍥犱负鍙湁杩欎袱涓樁娈电殑杈撳嚭鏈夊浘鐗囧叆搴撲簡
+        if state.phase in ['Feature Engineering', 'Model Building, Validation, and Prediction']: # 特征工程和建模阶段额外读取执行输出，供调试使用。
             output_messages = read_file(path_to_output) # 读取代码执行输出
         else:
             output_messages = ""
@@ -334,21 +334,21 @@ class Developer(Agent):
 
         return reply, single_round_debug_history
 
-    def _generate_prompt_round1(self, state: State) -> str: # 涓篸eveloper閰嶇疆鍓嶄竴闃舵鐨勪唬鐮侊紝鏁版嵁鐨勭壒寰佷互鍙婂彲鐢ㄧ殑宸ュ叿
+    def _generate_prompt_round1(self, state: State) -> str: # 为开发智能体准备前一阶段代码、数据特征和可用工具。
         prompt_round1 = ""
         # read the code from the previous phase
         is_previous_code, path_to_previous_code, _, path_to_last_phase_code = self._is_previous_code(state)
-        if is_previous_code: # 濡傛灉鍓嶄竴涓樁娈垫湁浠ｇ爜
+        if is_previous_code: # 如果前一相关阶段有代码。
             previous_code = read_file(path_to_last_phase_code) # 读取所有阶段代码
         else:
             previous_code = "There is no code file in the previous phase."
         prompt_round1 += f"\n#############\n# CODE FROM PREVIOUS PHASE #\n{previous_code}"
-        prompt_round1 += self._read_data(state, num_lines=1) # 璇诲彇鏁版嵁鏍蜂緥锛堜篃灏辨槸鎵€鏈夌壒寰侊級
+        prompt_round1 += self._read_data(state, num_lines=1) # 读取数据样例，展示各个特征。
         tools, tool_names = self._get_tools(state) # 拿到这该阶段的所有工具
         if len(tool_names) > 0:
             prompt_round1 += PROMPT_AVAILABLE_TOOLS.format(tools=tools, tool_names=tool_names)
         else:
-            prompt_round1 += "# AVAILABLE TOOLS #\nThere is no pre-defined Tools in this phase. You can use the functions from public libraries such as Pandas, NumPy, Scikit-learn, etc.\n"  # 娌℃湁棰勫畾涔塼ools
+            prompt_round1 += "# AVAILABLE TOOLS #\nThere is no pre-defined Tools in this phase. You can use the functions from public libraries such as Pandas, NumPy, Scikit-learn, etc.\n"  # 没有预定义工具。
 
         return prompt_round1
 
@@ -370,34 +370,34 @@ class Developer(Agent):
         restore_path = state.restore_dir
         competition_path = state.competition_dir
         task = PROMPT_DEVELOPER_TASK
-        constraints = PROMPT_DEVELOPER_CONSTRAINTS.format(restore_path=restore_path, competition_path=competition_path, phase_name=state.phase) # 浠ｇ爜寮€鍙戣繃绋嬬殑绾︽潫锛屽鎸囨槑鍙敤鏁版嵁鐨勫湴鍧€浠ュ強淇濆瓨缁撴灉鐨勫湴鍧€
+        constraints = PROMPT_DEVELOPER_CONSTRAINTS.format(restore_path=restore_path, competition_path=competition_path, phase_name=state.phase) # 代码开发约束，包括可用数据路径和结果保存路径。
         # eda_support = ""
-        # if "Exploratory Data Analysis" in state.phase:  # 鍘绘帀瀹忚EDA
+        # if "Exploratory Data Analysis" in state.phase:  # 暂停使用此 EDA 提示词分支。
         #     eda_support = PROMPT_EDA_DEVELOPER_SUPPORT
         background_info = state.background_info
         state_info = state.get_state_info()
         if state.phase == "Data Preparation":
             state_info+= PROMPT_DATA_PREPARATION_SUPPLEMENT
 
-        plan = state.memory[-1]["planner"]["plan"] # the format of plan is markdown  鍙栧埌褰撳墠闃舵鐨勫綋鍓嶈疆娆¤蹇嗛噷鐨刾lan
+        plan = state.memory[-1]["planner"]["plan"] # 从当前阶段本轮记忆中获取 Markdown 格式的计划。
 
         history.append({"role": "system",
                         "content": f"{role_prompt}{self.description}\n when you are writing code, you should follow the plan and the following constraints.\n{constraints}"})
 
-        if len(state.memory) != 1: # 璇存槑涓嶆槸绗竴杞墽琛岃闃舵锛屽垯璇诲彇缁忛獙
+        if len(state.memory) != 1: # 非首轮执行时，读取已有经验。
             self.description = "You are skilled at writing and implementing code according to plan." \
                             "You have advanced reasoning abilities and can improve your answers through reflection."
             experience_with_suggestion = self._gather_experience_with_suggestion(state)
 
 
-        # 鏂板锛氬疄渚嬪寲SACKCaseRetriever锛屾绱唬鐮佹
+        # 获取 SACKCaseRetriever，检索代码片段。
         if state.use_mode=="DSPipeline" and state.phase !="Data Preparation":
             try:
-                # 澶嶇敤涓嶱lanner鐩稿悓鐨凴etriever閰嶇疆
+                # 复用与 Planner 相同的检索器配置。
                 sack_case_retriever = self.get_sack_case_retriever()
                 if sack_case_retriever is None:
                     raise RuntimeError("SACKCaseRetriever is unavailable")
-                # 璋冪敤Retriever鑾峰彇浠诲姟瀵瑰簲鐨勪唬鐮佹
+                # 检索计划中各任务对应的代码片段。
                 task_code_mapping = sack_case_retriever.get_code_snippets_for_plan(plan=plan)
             except Exception as e:
                 logger.warning("SACKCaseRetriever failed: %s", e)
@@ -409,7 +409,7 @@ class Developer(Agent):
         relevant_code_snippets = ""
         for step, data in task_code_mapping.items():
             relevant_code_snippets += f"## TASK {step}: {data['task_desc']}\n"
-            # 閬嶅巻褰撳墠浠诲姟鐨勫涓猧nsight
+            # 遍历当前任务的各条见解。
             for idx, ins_data in enumerate(data["insights"], 1):
                 relevant_code_snippets += f"### Reference Insights {idx}: {ins_data['source']}\n"
                 # relevant_code_snippets += f" Insight URI: {ins_data['insight_uri']}\n"
@@ -421,7 +421,7 @@ class Developer(Agent):
                     print(f"Code snippets not found.")
                     relevant_code_snippets += "Code snippet was not found."
                 relevant_code_snippets += "\n"  # 分隔不同见解的代码段
-            relevant_code_snippets += "---\n"  # 鍒嗛殧涓嶅悓浠诲姟
+            relevant_code_snippets += "---\n"  # 分隔不同任务。
 
         if not relevant_code_snippets:
             relevant_code_snippets = "No relevant code snippets available for reference.\n"
@@ -431,18 +431,18 @@ class Developer(Agent):
                 if len(state.memory) == 1: # 第一轮没有经验
                     # round 0 竞赛背景 阶段任务要求  数据集信息  plan  任务（根据plan编码）
                     # 提示词中明确要求要对plan中的每个任务都要解释思考过程 编码 并解释代码
-                    # 瑕佹眰developer璇锋眰鍓嶄竴闃舵浠ｇ爜銆佹暟鎹殑鐗瑰緛銆佸彲鐢ㄧ殑宸ュ叿
+                    # 要求开发智能体获取前一阶段代码、数据特征和可用工具。
                     # input = PROMPT_DEVELOPER.format(phases_in_context=state.context, phase_name=state.phase, state_info=state_info, background_info=background_info, plan=plan,relevant_code_snippets= relevant_code_snippets,task=task,eda_support=eda_support)
                     input = PROMPT_DEVELOPER.format(phases_in_context=state.context, phase_name=state.phase, state_info=state_info, background_info=background_info, plan=plan,relevant_code_snippets= relevant_code_snippets,task=task)
-                    if retry_flag or no_code_flag: # 濡傛灉闇€瑕佽凯浠ｆ垨娌℃湁浠ｇ爜锛屽垯鐭湡璁板繂history鍥炲埌system閰嶇疆闃舵
+                    if retry_flag or no_code_flag: # 需要重试或未生成代码时，将短期对话历史重置到系统提示词。
                         history = history[:1]
                     raw_reply, history = self.llm.generate(input, history, max_completion_tokens=40960)
                     # round 1  给他配备前一阶段代码 特征 和工具  他就可以开始根据plan完成任务生成代码了
                     prompt_round1 = self._generate_prompt_round1(state)
                     input = prompt_round1
                     raw_reply, history = self.llm.generate(input, history, max_completion_tokens=40960)
-                else: # 绗簩杞鎶婄涓€杞殑缁忛獙鎷挎潵锛堥暱鏈熻蹇嗭級  涓攈istory淇濈暀杩囧線杩唬鏃剁殑鐭湡璁板繂
-                    # round 0 闄勫姞缁忛獙娉ㄥ叆
+                else: # 后续轮次引入已有经验，不保留过去迭代的短期对话历史。
+                    # round 0：注入已有经验。
                     input = PROMPT_DEVELOPER_WITH_EXPERIENCE_ROUND0_0.format(phases_in_context=state.context, phase_name=state.phase, state_info=state_info, background_info=background_info, plan=plan, task=task, experience_with_suggestion=experience_with_suggestion)
                     raw_reply, history = self.llm.generate(input, history, max_completion_tokens=40960)
                     # round 1 给他配备前一阶段代码 特征 和工具  他要先分析经验和建议
@@ -451,16 +451,16 @@ class Developer(Agent):
                     raw_reply, history = self.llm.generate(input, history, max_completion_tokens=40960)
                     with open(f'{state.restore_dir}/{self.role}_first_mid_reply.txt', 'w',encoding='utf-8') as f:
                         f.write(raw_reply)
-                    # round 2 鐢熸垚鏂扮殑浠ｇ爜solution
+                    # round 2：生成新的代码方案。
                     input = PROMPT_DEVELOPER_WITH_EXPERIENCE_ROUND0_2
                     raw_reply, history = self.llm.generate(input, history, max_completion_tokens=40960)
-                if retry_flag: # 濡傛灉宸茬粡缁忚繃浜唕etry鐢熸垚鏂颁唬鐮侊紝瑕佹妸涔嬪墠鐨勯敊璇俊鎭繚瀛樹笅鏉ュ苟娓呯┖閿欒淇℃伅
+                if retry_flag: # 重试生成代码后，保存此前的错误信息并清空当前错误记录。
                     self._save_all_error_messages(state)
                     self.all_error_messages = [] # clear the error messages after retry
                     logger.info("The developer asks for help when debugging the code. Regenerating the code.")
                     with open(f'{state.restore_dir}/{self.role}_retry_reply.txt', 'w',encoding='utf-8') as f:
                         f.write(raw_reply) # 重新生成的代码入库
-                elif no_code_flag: # 娌℃湁浠ｇ爜
+                elif no_code_flag: # 未生成代码。
                     self._save_all_error_messages(state)
                     self.all_error_messages = [] # clear the error messages
                     logger.info("Last reply has no code. Regenerating the code.")
@@ -471,7 +471,7 @@ class Developer(Agent):
                         f.write(raw_reply)
                 retry_flag = False
             elif round >= 1: # 代码调试与测试分支  第二次及之后每一次迭代如果有bug都要debug调试代码 （第一次只生成不调试） 如果没有bug就进行单元测试
-                if error_flag and round < max_tries: # if there is still error in the last round, do not debug  鏈塨ug 闇€瑕乨ebug
+                if error_flag and round < max_tries: # if there is still error in the last round, do not debug  存在错误时进行调试。
                     # debug in each round
                     raw_reply, single_round_debug_history = self._debug_code(state, error_flag, not_pass_flag, not_pass_information, raw_reply)
                     debug_history.append(single_round_debug_history)
@@ -480,20 +480,20 @@ class Developer(Agent):
                         retry_flag = True
                 elif not error_flag: # if there is no error 没有bug就继续单元测试，单元测试要直接尝试到上限再推出
                     # conduct unit test
-                    while test_round < 2*max_tries and not error_flag: # 涓嶆柇灏濊瘯鍗曞厓娴嬭瘯 淇浠ｇ爜 杩唬鐩村埌閫氳繃娴嬭瘯
+                    while test_round < 2*max_tries and not error_flag: # 重复测试和修复代码，直到通过测试或达到循环上限。
                         logger.info(f"Start the {test_round+1}-th unit test.")
                         not_pass_flag, not_pass_information = self._conduct_unit_test(state)
                         if not_pass_flag: # if the unit test is not passed 单元测试没通过也要debug问题所在 并修正对应代码段
                             raw_reply, single_round_test_history = self._debug_code(state, error_flag, not_pass_flag, not_pass_information, raw_reply)
                             test_history.append(single_round_test_history)
-                            no_code_flag, _, path_to_run_code = self._generate_code_file(state, raw_reply) # regenerate the code file 淇濆瓨淇鍚庣殑浠ｇ爜
+                            no_code_flag, _, path_to_run_code = self._generate_code_file(state, raw_reply) # 重新生成代码文件，保存修复后的代码。
                             error_flag = self._run_code(state, no_code_flag, path_to_run_code) # 执行代码并保存错误原因或正确输出
                         else: # 通过单元测试就可以跳出循环 可以进入下一阶段了
                             break
                         test_round += 1
-                    if not not_pass_flag or test_round == max_tries: # 濡傛灉鍗曞厓娴嬭瘯鍒拌揪涓婇檺锛屼篃瑕佹帹鍑烘煇闃舵鏌愯疆娆＄殑浠ｇ爜杩唬锛岃杩涘叆鏌愰樁娈电殑涓嬩竴杞噸鏂板紑濮嬩簡
+                    if not not_pass_flag or test_round == max_tries: # 测试通过或达到此处的轮次条件时，退出当前代码迭代。
                         break
-                else: # 浠ｇ爜鏈塨ug锛屼絾涔熷埌杈綿ebug涓婇檺 涔熻閲嶆柊杩涘叆璇ラ樁娈电殑涓嬩竴杞噸鏂板紑濮嬩簡
+                else: # 代码仍有错误且调试达到上限时，退出当前代码迭代。
                     break
             logger.info(f"The {round+1}-th try.")
             if retry_flag: # 重新生成代码的轮次可以让round不变（这里-1后+1）
@@ -516,7 +516,7 @@ class Developer(Agent):
             execution_flag = False
             logger.info(f"State {state.phase} - Agent {self.role} finishes working with error.")
         else:
-            if not_pass_flag:# 娌℃湁error璁板綍浣嗕篃娌℃湁閫氳繃 璇存槑鏄痳un閫氳繃浜嗕絾鏄崟鍏冩祴璇曟病鏈夐€氳繃
+            if not_pass_flag:# 没有执行错误记录但测试未通过，说明代码运行成功而单元测试失败。
                 execution_flag = False
                 logger.info(f"State {state.phase} - Agent {self.role} finishes working with not pass tests.")
                 with open(f'{state.restore_dir}/{state.dir_name}_not_pass_information.txt', 'w',encoding='utf-8') as f:

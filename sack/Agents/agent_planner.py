@@ -30,8 +30,8 @@ class Planner(Agent):
         previous_plan = ""
         previous_dir_name = None
         previous_phases = state.get_previous_phase(type="plan") # 返回过去的所有阶段
-        for previous_phase in previous_phases: # 閬嶅巻鑾峰彇杩囧幓鍚勪釜闃舵鐨剅eport鍜宲lan锛堥暱鏈熻蹇嗭級
-            previous_dir_name = state.phase_to_directory[previous_phase] # 姣忎釜闃舵鐨勫巻鍙茶蹇嗭紙瀛樺偍鍦ㄦ湰鍦扮殑闀挎湡璁板繂锛夐兘鍦ㄥ搴旂殑鏂囦欢澶逛笅淇濆瓨
+        for previous_phase in previous_phases: # 读取过去各阶段的报告和计划，作为长期记忆。
+            previous_dir_name = state.phase_to_directory[previous_phase] # 各阶段的历史记忆保存在对应的本地文件夹中。
             previous_plan += f"## {previous_phase.upper()} ##\n"
             path_to_previous_plan = f'{state.competition_dir}/{previous_dir_name}/plan.json'
             if os.path.exists(path_to_previous_plan):
@@ -64,16 +64,16 @@ class Planner(Agent):
 
         # 匹配最外层方括号内容（允许跨行）
         quoted_items = []
-        # 鍖归厤鍗曞紩鍙锋垨鍙屽紩鍙峰寘鍥寸殑瀛楃涓诧紙鏀寔杞箟鍜岃法琛岋級
+        # 匹配由单引号或双引号包围的字符串，支持转义和跨行。
         quote_pattern = r'([\'"])(?:(?!\1).|\\.)*?\1'
         for match in re.finditer(quote_pattern, list_content, re.DOTALL):
             quoted_str = match.group(0)
             try:
-                # 浣跨敤AST瀹夊叏瑙ｆ瀽瀛楃涓诧紙澶勭悊鎵€鏈夎浆涔夊瓧绗︼級
+                # 使用 AST 安全解析字符串及其转义字符。
                 parsed = ast.literal_eval(quoted_str)
                 quoted_items.append(str(parsed))
             except (ValueError, SyntaxError):
-                # 瑙ｆ瀽澶辫触鏃朵娇鐢ㄥ師濮嬪瓧绗︿覆锛堝幓闄ゅ鍥村紩鍙凤級
+                # 解析失败时，使用去掉外层引号的原字符串。
                 quoted_items.append(quoted_str[1:-1])
 
         if quoted_items:
@@ -86,7 +86,7 @@ class Planner(Agent):
             reader = csv.reader(StringIO(list_content), skipinitialspace=True)
             return [item for row in reader for item in row if item]
         except ImportError:
-            # 鏃燙SV妯″潡鏃朵娇鐢ㄧ畝鍗曞垎鍓诧紙鏈€鍚庢墜娈碉級
+            # CSV 解析不可用时，最后回退到简单分割。
             return [s.strip() for s in list_content.split(',') if s.strip()]
 
 
@@ -97,10 +97,10 @@ class Planner(Agent):
             num_lines=11
         else:
             num_lines=6
-        data_preview = self._data_preview(state, num_lines=num_lines)  # 瀵规暟鎹泦鍒嗘瀽
+        data_preview = self._data_preview(state, num_lines=num_lines)  # 预览并分析数据。
         background_info = f"Data preview:\n{data_preview}"
         state.set_background_info(background_info) # 数据集信息加载
-        state_info = state.get_state_info() # 闃舵鑳屾櫙淇℃伅
+        state_info = state.get_state_info() # 当前阶段的背景信息。
         if state.phase == "Data Preparation":
             state_info+= PROMPT_DATA_PREPARATION_SUPPLEMENT
 
@@ -112,11 +112,11 @@ class Planner(Agent):
             # Round 0   竞赛上下文信息、阶段信息、阶段的预定义规则、数据集信息、阶段性任务   这些信息全部作为planner的基本prompt(职能定义)
             # 但是还有一些需要的信息 如之前阶段的report和plan  作为memory也需要作为上下文信息考虑进去  因此需要请求
             # eda_phase_support = ""
-            # if state.phase in ["Preliminary Exploratory Data Analysis","In-depth Exploratory Data Analysis"]:  # 鍘绘帀瀹忚EDA
+            # if state.phase in ["Preliminary Exploratory Data Analysis","In-depth Exploratory Data Analysis"]:  # 曾用于添加宏观 EDA 支持。
             #     eda_phase_support = PROMPT_EDA_PHASE_SUPPORT
-            task = PROMPT_PLANNER_TASK.format(phase_name=state.phase)  # planner鐨勮闃舵浠诲姟
+            task = PROMPT_PLANNER_TASK.format(phase_name=state.phase)  # Planner 在当前阶段的任务。
 
-            user_rules = state.generate_rules() # 浜哄畾涔夌殑鍚勪釜闃舵涓叿浣撲换鍔℃墽琛岀殑涓€浜涜鍒欙紝渚嬪浠€涔堟儏鍐典笅鎶婄己澶卞€煎垪鏁村垪鍓旈櫎锛岃鍒掓椂瑕佽€冭檻杩涘幓
+            user_rules = state.generate_rules() # 生成计划时纳入用户定义的阶段规则，例如缺失列的处理条件。
 
             if state.use_mode == "DSPipeline" and state.phase !="Data Preparation":
                 # if state.phase in ["Preliminary Exploratory Data Analysis","In-depth Exploratory Data Analysis"]:  # 去掉宏观EDA
@@ -140,13 +140,13 @@ class Planner(Agent):
             # Round 1 将过往阶段的report和plan的长期记忆都给planner  当前阶段可用工具也提供
             input = f"# PREVIOUS PLAN #\n{self._get_previous_plan_and_report(state)[0]}\n#############\n# PREVIOUS REPORT #\n{self._get_previous_plan_and_report(state)[1]}\n"
             if state.phase!="Data Preparation":
-                input += self._read_data(state, num_lines=1) # 鏁版嵁闆嗙殑绗竴琛屼綔涓烘牱渚嬪嵆鍙紙杩欓噷鎸嘾ataset鎴杅eature set 瀵瑰簲鏁版嵁澶勭悊鎴栫壒寰佸伐绋嬮樁娈碉級
+                input += self._read_data(state, num_lines=1) # 将数据集首行作为样例，用于说明当前数据处理阶段的特征。
             else :
                 input += self._read_data(state, num_lines=5)
             tools, tool_names = self._get_tools(state)   # 获取当前阶段的所有工具
             if len(tool_names) > 0:
                 input += PROMPT_PLANNER_TOOLS.format(tools=tools, tool_names=tool_names)  # 预定义工具+公开库工具
-            else:# 娌℃湁棰勫畾涔夌殑宸ュ叿灏卞彧鐢ㄥ叕寮€搴撶殑宸ュ叿
+            else:# 没有预定义工具时，使用公共工具库。
                 input += "# AVAILABLE TOOLS #\nThere is no pre-defined Tools in this phase. You can use the functions from public libraries such as Pandas, NumPy, Scipy, Scikit-learn, etc.\n"
             raw_plan_reply, history = self.llm.generate(input, history, max_completion_tokens=4096)  # 开始规划任务
             with open(f'{state.restore_dir}/raw_plan_reply.txt', 'w',encoding='utf-8') as f: # 阶段的规划信息入库
@@ -159,7 +159,7 @@ class Planner(Agent):
             with open(f'{state.restore_dir}/markdown_plan.txt', 'w',encoding='utf-8') as f:
                 f.write(markdown_plan)
 
-            # Round 3  plan涔熻缁勭粐鎴恓son鏍煎紡 瀛樻。
+            # Round 3：把计划组织成 JSON 并存档。
             input = PROMPT_PLNNAER_REORGANIZE_IN_JSON.format(task_core_elements=INSIGHT_REFERENCE_SPEC,insight_reference_spec=TASK_CORE_ELEMENTS)
             raw_json_plan, history = self.llm.generate(input, history, max_completion_tokens=4096)
             try:
@@ -179,20 +179,20 @@ class Planner(Agent):
             last_planner_score = state.memory[-2].get("reviewer", {}).get("score", {}).get("agent planner", 0) # 上一轮planner的得分
             if last_planner_score >= 3: # if the score of the last planner is greater than or equal to 3, it means the planner's plan is acceptable
                 return {"planner": state.memory[-2]["planner"]}
-            else: # 杩欓噷鏈変簺鐤戦棶 涓轰綍planner鐨勮鍒掍笉鍙帴鍙楄繕瑕佹部鐢╬lanner鐨勭粨鏋滆€屼笉鏄噸鏂拌鍒掞紵
+            else: # 这里需要确认：计划未通过审核时，是否应重新规划。
                 return {"planner": state.memory[-2]["planner"]}
 
-        # save history  planner鍙湁绗竴杞繚瀛榩lan
+        # 保存本轮 Planner 的计划历史。
         with open(f'{state.restore_dir}/{self.role}_history.json', 'w',encoding='utf-8') as f:
             json.dump(history, f, ensure_ascii=False,indent=4)
 
 
-        # reviewer鍦ㄨ瘎浠锋椂鍙渶瑕佹牴鎹緭鍏ユ暟鎹泦鐨勪俊鎭嵆鍙缁撴灉璇勪环
+        # Reviewer 根据输入数据和执行结果评价计划。
         input_used_in_review = f"   <background_info>\n{background_info}\n    </background_info>"
 
         print(f"State {state.phase} - Agent {self.role} finishes working.")
 
-        # 鍏佽鐢ㄦ埛淇敼plan
+        # 允许用户修改计划。
         with open(SACK_CONFIG_PATH, 'r',encoding='utf-8') as f:
             config = json.load(f)
         user_interaction = config['user_interaction']['plan'] # 用户是否参与交互（是否启用human in the loop）
@@ -205,7 +205,7 @@ class Planner(Agent):
             user_input = user_input.strip().lower()
 
             if user_input == 'edit':
-                print(f"\nPlease edit the file: {state.restore_dir}/markdown_plan.txt") # 鍏佽浜虹洿鎺ヤ慨鏀筽lan
+                print(f"\nPlease edit the file: {state.restore_dir}/markdown_plan.txt") # 允许人工直接修改计划。
                 print("Save your changes and press Enter when you're done.")
                 builtin_input("Press Enter to continue...")
                 # Re-read the potentially modified plan
@@ -219,7 +219,7 @@ class Planner(Agent):
                 print("Continuing with the current plan.")
 
         # save plan and result
-        plan = markdown_plan # 鍙兘鏄凡缁忎汉涓轰慨鏀瑰悗鐨刾lan
+        plan = markdown_plan # 读取人工修改后的计划。
         result = markdown_plan
 
         return {

@@ -67,7 +67,7 @@ class SACKCaseRetriever():
 
 
     def get_current_comp_path(self, state: State):
-        """浠庣姸鎬佷腑鑾峰彇褰撳墠绔炶禌鐨勬湰鍦拌矾寰勶紙鐢ㄤ簬鐩镐技鎬ф绱級"""
+        """从状态中获取当前竞赛的本地路径，用于相似性检索"""
         raw_competition = str(state.competition)
         raw_path = Path(raw_competition).expanduser()
         if raw_path.is_absolute() and raw_path.exists():
@@ -109,13 +109,13 @@ class SACKCaseRetriever():
 
     def get_recall_k(self, k: int) -> int:
         """
-        鍙洖闃舵鍊欓€夋暟閲忥細灏介噺澶т簬鏈€缁坘锛岄伩鍏嶉噸鎺掓椂鍊欓€変笉瓒炽€?
+        召回足够多的候选，以免重排后候选不足。
         最小10，默认取 max(10, 3*k)。
         """
         return max(10, 3 * k)
     
     def retrieve_similar_competitions(self, state: State, k: int = 5, retrieval_mode: str = "weighted_topk") -> List[Dict]:
-        """妫€绱笌褰撳墠绔炶禌鐩镐技鐨則op-k绔炶禌"""
+        """检索与当前竞赛相似的 Top-k 历史竞赛"""
         self.last_retrieval_error = None
         try:
             similar_df_cache_path = os.path.join(state.competition_dir, "similar_competitions_df.csv")
@@ -131,14 +131,14 @@ class SACKCaseRetriever():
             if similar_df is None:
                 competition,current_comp_path = self.get_current_comp_path(state)
     
-                # 鑾峰彇褰撳墠绔炶禌鐨刾rofile
+                # 获取当前竞赛的profile
                 current_comp_profile = self.sack_knowledge.generate_competition_profile(
                     comp_id=competition,
                     persist_path=current_comp_path,
                 )
     
     
-                # 璋冪敤SACKKnowledgeBase API鑾峰彇瀹忚鐩镐技绔炶禌
+                # 调用 SACKKnowledgeBase API 获取基础相似竞赛。
                 base_similar_df = self.sack_knowledge.get_top_k_similar_competitions(
                     current_comp=current_comp_profile,
                     return_all=True,
@@ -150,7 +150,7 @@ class SACKCaseRetriever():
                     show_query=False
                 )
     
-                # 澶栬繛鎺ョ敓鎴愬師濮嬫暟鎹紙浠呭惈鍘熷鐩镐技搴︼紝鏃犲姞鏉冨瓧娈碉級
+                # 外连接原始相似度数据，不加入阶段权重。
                 merge_key = "Competition_ID"
                 if merge_key not in base_similar_df.columns:
                     logger.warning("Base similarity result is empty or missing %s.", merge_key)
@@ -174,11 +174,11 @@ class SACKCaseRetriever():
                     if col != merge_key and pd.api.types.is_numeric_dtype(similar_df[col]):
                         similar_df[col] = similar_df[col].fillna(0.0).round(3)
     
-                # ========== 淇濆瓨鍘熷鏁版嵁鍒癈SV缂撳瓨 ==========
+                # 将原始相似度数据保存为 CSV 缓存。
                 try:
-                    # 纭繚鐩綍瀛樺湪
+                    # 确保目录存在。
                     os.makedirs(state.competition_dir, exist_ok=True)
-                    # 淇濆瓨CSV锛歩ndex=False閬垮厤澶氫綑绱㈠紩鍒楋紝utf-8鍏煎涓枃
+                    # 保存 CSV 时不写索引，并使用 UTF-8 编码。
                     similar_df.to_csv(similar_df_cache_path, index=False, encoding="utf-8")
                     logger.info(f"鎴愬姛淇濆瓨鐩镐技搴︾紦瀛橈細{similar_df_cache_path}")
                 except Exception as e:
@@ -192,9 +192,9 @@ class SACKCaseRetriever():
 
                 current_similar_df = similar_df.copy()
 
-                # 鍒濆鍖朎DA_Similarity瀛楁
+                # 初始化 EDA_Similarity 字段。
                 current_similar_df["EDA_Similarity"] = 0.0
-                # 璁＄畻EDA绫诲瀷鏉冮噸鎬诲拰锛堢敤浜庡綊涓€鍖栵級
+                # 计算 EDA 类型权重总和，用于归一化。
                 if eda_weights is not None and final_similar_weight is not None:
                     total_eda_type_weight = sum([w for w in eda_weights.values() if w > 0])
 
@@ -205,22 +205,22 @@ class SACKCaseRetriever():
                                 continue
                             # 匹配该EDA类型下的所有模块字段（如pre_eda_data_overview）
                             module_fields = [col for col in current_similar_df.columns if col.startswith(f"{eda_type}_")]
-                            # 閬嶅巻妯″潡瀛楁锛屾寜妯″潡鏉冮噸鍔犳潈姹傚拰
+                            # 按模块权重累加相似度。
                             for field in module_fields:
                                 # 提取模块名（如pre_eda_data_overview → data_overview）
                                 module_name = field.replace(f"{eda_type}_", "")
                                 # 获取模块权重（从全局MODULE_WEIGHTS配置中取）
                                 module_weight = MODULE_WEIGHTS.get(eda_type, {}).get(module_name, 1.0)
-                                # 绱姞锛氭ā鍧楀師濮嬬浉浼煎害 脳 EDA绫诲瀷鏉冮噸 脳 妯″潡鏉冮噸
+                                # 模块相似度乘以 EDA 类型权重和模块权重后累加。
                                 current_similar_df["EDA_Similarity"] += current_similar_df[field] * type_weight * module_weight
 
-                    # 褰掍竴鍖朎DA_Similarity锛堥伩鍏嶆潈閲嶆€诲拰涓嶄负1瀵艰嚧鏁板€兼孩鍑猴級
+                    # 归一化 EDA_Similarity，避免权重总和不为 1。
                     if total_eda_type_weight > 0:
                         current_similar_df["EDA_Similarity"] = current_similar_df["EDA_Similarity"] / total_eda_type_weight
                     else:
                         current_similar_df["EDA_Similarity"] = 0.0
 
-                    # ========== 璁＄畻鏈€缁堣瀺鍚堢浉浼煎害 ==========
+                    # 计算最终融合相似度。
                     current_similar_df["final_similarity"] = (
                             current_similar_df["Total_Score"] * base_weight +
                             current_similar_df["EDA_Similarity"] * eda_weight
@@ -251,29 +251,29 @@ class SACKCaseRetriever():
                 )
 
                 # --------- 2) Rerank：在候选集上按阶段计算 EDA_Similarity 并排序 ---------
-                # 榛樿涓嶄娇鐢‥DA锛堝Preliminary EDA闃舵锛夛紝浠呮寜Total_Score杈撳嚭
+                # 初步 EDA 阶段不使用 EDA 相似度，仅按 Total_Score 排序。
                 recall_df["EDA_Similarity"] = 0.0
 
                 if eda_weights is not None:
-                    # 璁＄畻EDA绫诲瀷鏉冮噸鎬诲拰锛堢敤浜庡綊涓€鍖栵級
+                    # 计算 EDA 类型权重总和，用于归一化。
                     total_eda_type_weight = sum([w for w in eda_weights.values() if w > 0])
                     if total_eda_type_weight > 0:
                         for eda_type, type_weight in eda_weights.items():
                             if type_weight <= 0:
                                 continue
 
-                            # 鍙娇鐢ㄨeda_type鐩稿叧瀛楁锛堢浉褰撲簬鈥滃瓧娈祄ask鈥濓級
+                            # 仅使用当前 EDA 类型相关字段。
                             module_fields = [col for col in recall_df.columns if col.startswith(f"{eda_type}_")]
 
                             for field in module_fields:
-                                # 鎻愬彇妯″潡鍚嶏紙涓庝綘鍘熼€昏緫淇濇寔涓€鑷达級
+                                # 提取模块名，沿用原有权重逻辑。
                                 module_name = field.replace(f"{eda_type}_", "")
                                 module_weight = MODULE_WEIGHTS.get(eda_type, {}).get(module_name, 1.0)
                                 recall_df["EDA_Similarity"] += recall_df[field] * type_weight * module_weight
 
                         recall_df["EDA_Similarity"] = recall_df["EDA_Similarity"] / total_eda_type_weight
 
-                    # Rerank锛氬厛鎸塃DA_Similarity锛屽啀鐢═otal_Score鍋歵ie-breaker
+                    # Rerank：先按EDA_Similarity，再用Total_Score做tie-breaker
                     rerank_df = (
                         recall_df
                         .sort_values(by=["EDA_Similarity", "Total_Score"], ascending=[False, False])
@@ -281,7 +281,7 @@ class SACKCaseRetriever():
                         .reset_index(drop=True)
                     )
                 else:
-                    # 涓嶉渶瑕丒DA閲嶆帓鐨勯樁娈碉細鐩存帴鎸塗otal_Score杈撳嚭Top-k
+                    # 不需要EDA重排的阶段：直接按Total_Score输出Top-k
                     rerank_df = (
                         recall_df
                         .sort_values(by="Total_Score", ascending=False)
@@ -298,12 +298,12 @@ class SACKCaseRetriever():
                 raise ValueError(f"Unknown retrieval_mode: {retrieval_mode}")
     
     
-            # 杞崲涓哄瓧鍏稿垪琛紝琛ュ厖绔炶禌鑳屾櫙淇℃伅锛堝亣璁句粠KG涓煡璇級
+            # 转换为字典列表，并补充竞赛背景信息。
             similar_comps = []
             for idx, row in current_similar_df.iterrows():
                 comp_id = row["Competition_ID"]
                 print(comp_id)
-                # 杩欓噷鍙墿灞曪細璋冪敤KG鑾峰彇绔炶禌鎻忚堪銆侀棶棰樿儗鏅瓑璇︾粏淇℃伅
+                # 此处可扩展为从知识图谱获取竞赛描述。
                 # 【关键修改】：处理所有可能的字段缺失，补充融合后的字段
                 similar_comps.append({
                     "competition_id": comp_id,
@@ -381,26 +381,26 @@ class SACKCaseRetriever():
             }
 
         for pipeline_uri, info in core_insights.items():
-            comp_id = info["competition_id"]  # 鎵€灞炵珵璧涚殑URI
+            comp_id = info["competition_id"]  # 所属竞赛的 URI。
             comp_uri_prefix = comp_id  # 竞赛URI作为前缀（如http://sack.local/resource/kaggle/playground-series-s3e11）
             if pipeline_uri.startswith(comp_uri_prefix):
-                pipeline_id = pipeline_uri[len(comp_uri_prefix) + 1:]  # 鍘婚櫎鍓嶇紑鍜屽垎闅旂'/'
+                pipeline_id = pipeline_uri[len(comp_uri_prefix) + 1:]  # 去除 URI 前缀和分隔符。
             else:
-                # 寮傚父澶勭悊锛氳嫢URI鏍煎紡涓嶅尮閰嶏紝鍙栨渶鍚庝竴娈典綔涓篺allback
+                # 异常处理：若URI格式不匹配，取最后一段作为fallback
                 pipeline_id = pipeline_uri.split('/')[-1]
                 logger.warning("Unexpected pipeline_uri format; using fallback ID %s for URI %s", pipeline_id, pipeline_uri)
 
-            # 涓烘瘡涓猧nsight鍏宠仈瑙勮寖ID
+            # 为每个insight关联规范ID
             formatted_insights = []
             for insight in info["insights"]:
                 formatted_insights.append({
-                    # 淇濈暀鍘熷瀛楁锛屾柊澧炶鑼僆D鍏宠仈
+                    # 保留原始字段和规范 ID。
                     **insight
                 })
 
-            # 灏嗗寘鍚鑼僆D鐨刾ipeline娣诲姞鍒扮珵璧涘垎缁勪腑
+            # 将带规范 ID 的 Pipeline 加入竞赛分组。
             comp_insights[comp_id]["pipelines"].append({
-                "pipeline_id": pipeline_id,  # 鏂板锛氳鑼冪殑pipeline ID
+                "pipeline_id": pipeline_id,  # 规范的 Pipeline ID。
                 "insights": formatted_insights
             })
         return comp_insights
@@ -409,7 +409,7 @@ class SACKCaseRetriever():
         """
         Hybrid Gate:
         1) Phase prefilter
-        2) Hard Gate: 瑙勫垯鎷︽埅鏄庢樉閿欒
+        2) Hard Gate: 用规则拦截明显不适用的经验
         3) Soft Gate: LLM做适用性判断(按 competition 批量做)
         """
         if not comp_insights or "message" in comp_insights:
@@ -421,7 +421,7 @@ class SACKCaseRetriever():
 
         gate_context = self._build_gate_context_from_state(state)
 
-        # Step 1. phase prefilter 杩囨护褰撳墠闃舵澶栫殑CoreInsight
+        # 按当前阶段预过滤 CoreInsight。
         phase_prefiltered = self._prefilter_insights_by_phase(comp_insights, current_phase)
         if not phase_prefiltered or "message" in phase_prefiltered:
             return phase_prefiltered
@@ -444,7 +444,7 @@ class SACKCaseRetriever():
 
             # -----------------------------------
             # Step 2. Hard Gate（逐条）
-            # 鍏堜繚鐣欓€氳繃hard gate鐨勫€欓€夛紝鍐嶆寜competition缁熶竴soft gate
+            # 先保留通过 Hard Gate 的候选，再按竞赛执行 Soft Gate。
             # -----------------------------------
             hard_kept_candidates = []  # competition级别候选池
             hard_gate_meta_by_pipeline = {}  # pipeline_id -> [meta...]
@@ -497,7 +497,7 @@ class SACKCaseRetriever():
             # soft_gate_results: insight_id -> meta
 
             # -----------------------------------
-            # Step 4. 閲嶇粍缁撴灉鍥炲師缁撴瀯
+            # Step 4. 重组结果回原结构
             # -----------------------------------
             kept_pipelines = []
 
@@ -508,7 +508,7 @@ class SACKCaseRetriever():
                 kept_insights = []
                 gate_meta = []
 
-                # 鍏堟斁鍏ard gate meta
+                # 先加入 Hard Gate 的元数据。
                 existing_hard_meta = hard_gate_meta_by_pipeline.get(pipeline_id, [])
                 hard_meta_map = {m["insight_id"]: m for m in existing_hard_meta}
 
@@ -520,17 +520,17 @@ class SACKCaseRetriever():
                     if hard_meta_entry is None:
                         continue
 
-                    # hard gate鍏堣drop鐨勶紝鍙湁hard璁板綍
+                    # Hard Gate 已丢弃的条目只保留审核记录。
                     hard_decision = hard_meta_entry["hard_gate"].get("decision")
-                    if hard_decision == "drop": # hard drop鍒欒烦杩噑oft
+                    if hard_decision == "drop": # hard drop则跳过soft
                         gate_meta.append(hard_meta_entry)
                         continue
 
-                    # hard閫氳繃鍚庢煡soft缁撴灉
+                    # hard通过后查soft结果
                     candidate_id = f"{pipeline_id}::{insight_id}"
                     soft_meta = soft_gate_results.get(candidate_id)
                     if soft_meta is None:
-                        # LLM娌¤繑鍥炶鏉★紝淇濆畧drop
+                        # LLM 未返回该条目时，保守地丢弃。
                         fallback_soft_meta = self._build_gate_meta(
                             competition_id=comp_id,
                             pipeline_id=pipeline_id,
@@ -567,8 +567,8 @@ class SACKCaseRetriever():
                     else:
                         gate_summary["soft_drop"] += 1
 
-                if kept_insights:  # pipeline涓€氳繃gate鐨刬nsights
-                    # 鍙€夛細鎸塩onfidence鎺掑簭
+                if kept_insights:  # pipeline业过gate的insights
+                    # 叉：按confidence排序
                     kept_insights = self._sort_insights_by_soft_gate_confidence(
                         kept_insights=kept_insights,
                         gate_meta=gate_meta
@@ -709,7 +709,7 @@ class SACKCaseRetriever():
             "basic_dimensionality": {
                 "samples_per_feature": 1.0
             },
-            # deep_eda.feature_relationships锛堢渷鐣ュ師鏈夊唴瀹癸紝淇濇寔涓庣敤鎴锋彁渚涚殑涓€鑷达級
+            # 此处省略 deep_eda.feature_relationships 的部分原有内容。
             "feature_relationships": {
                 "correlation_structure.correlation_strength.weak_correlation_ratio": 0.08,
                 "correlation_structure.correlation_strength.moderate_correlation_ratio": 0.08,
@@ -755,17 +755,17 @@ class SACKCaseRetriever():
         eda_insight = {}  # 最终结构：eda_type → module → field_path → value
 
         for eda_type, eda_file_path in eda_paths.items():
-            eda_insight[eda_type] = {}  # 鍒濆鍖杕odule瀛楀吀
+            eda_insight[eda_type] = {}  # 初始化模块字典。
             if os.path.exists(eda_file_path) and os.path.getsize(eda_file_path) > 0:
                 try:
-                    # 1. 璇诲彇鍘熷宓屽JSON
+                    # 读取原始嵌套 JSON。
                     with open(eda_file_path, 'r', encoding='utf-8') as f:
                         raw_json = json.load(f)
 
                     # 2. 直接组织为module→field_path→value（关键：不再扁平化，而是按FIELD_WEIGHTS匹配字段路径）
                     for module in MODULE_WEIGHTS.get(eda_type, {}).keys():
                         if module not in raw_json:
-                            continue  # 璺宠繃涓嶅瓨鍦ㄧ殑妯″潡
+                            continue  # 跳过不存在的模块
                         module_data = raw_json[module]
 
                         # 递归提取字段路径（内部逻辑，不再暴露flat字典）
@@ -782,7 +782,7 @@ class SACKCaseRetriever():
 
                         # 提取当前模块的所有字段路径→值
                         field_paths = extract_field_paths(module_data)
-                        # 鍙繚鐣橣IELD_WEIGHTS涓畾涔夌殑瀛楁锛堣繃婊ゆ棤鍏冲瓧娈碉級
+                        # 仅保留 FIELD_WEIGHTS 定义的字段。
                         valid_field_paths = {fp: val for fp, val in field_paths.items() if
                                              fp in FIELD_WEIGHTS.get(module, {})}
                         eda_insight[eda_type][module] = valid_field_paths
@@ -855,12 +855,12 @@ class SACKCaseRetriever():
     def _get_phase_visible_eda_insight(self, full_eda_insight: Dict[str, Any], phase: str) -> Dict[str, Any]:
         """
         按阶段逐步披露EDAInsight，而不是始终传全量。
-        瑙勫垯锛?
+        规则：
         - Preliminary EDA: 只看 pre_eda 的浅层模块
         - Data Cleaning: 重点看 data_quality + 少量分布/维度信息
         - In-depth EDA: 看全部 pre_eda + deep_eda 的 feature_relationships / complexity / special_scenarios
         - Feature Engineering: 看 pre_eda 全部 + deep_eda 全部
-        - Model Building...: 鍩烘湰鍙湅鍏ㄩ噺
+        - Model Building...: 基本可查看全部信息
         """
         phase = (phase or "").strip()
 
@@ -878,7 +878,7 @@ class SACKCaseRetriever():
                     visible["pre_eda"][module] = pre_eda[module]
 
         elif phase == "Data Cleaning":
-            # 娓呮礂闃舵浠ヨ川閲忛棶棰樹负涓伙紝鍙ˉ灏戦噺鏈夊姪浜庡垽鏂鐞嗙瓥鐣ョ殑鍒嗗竷淇℃伅
+            # 清洗阶段主要关注质量问题，辅以少量分布信息。
             for module in ["data_quality", "basic_distribution", "basic_dimensionality"]:
                 if module in pre_eda:
                     visible["pre_eda"][module] = pre_eda[module]
@@ -899,7 +899,7 @@ class SACKCaseRetriever():
             visible["deep_eda"] = deep_eda
 
         else:
-            # 榛樿淇濆畧锛氬彧缁檖re_eda
+            # 默认保守处理：只提供 pre_eda 信息。
             visible["pre_eda"] = pre_eda
 
         return visible
@@ -907,7 +907,7 @@ class SACKCaseRetriever():
     def _infer_is_time_series(self, visible_eda_insight: Dict[str, Any], fallback_text: str = "") -> bool:
         """
         优先从结构化EDAInsight判断是否时序任务；
-        鑻ョ己澶憋紝鍐嶅洖閫€鍒版枃鏈叧閿瘝銆?
+        如果结构化信息缺失，再回退到文本关键词。
         """
         try:
             special_scenarios = (
@@ -920,11 +920,11 @@ class SACKCaseRetriever():
             if isinstance(value, bool):
                 return value
 
-            # 2) 鏁板€煎瀷锛氶潪0瑙嗕负True
+            # 数值类型：非零视为 True。
             if isinstance(value, (int, float)):
                 return bool(value)
 
-            # 3) 瀛楃涓插瀷
+            # 字符串类型。
             if isinstance(value, str):
                 v = value.strip().lower()
                 if v in {"true", "1", "yes"}:
@@ -935,7 +935,7 @@ class SACKCaseRetriever():
         except Exception as e:
             logger.warning(f"Failed to infer is_time_series from visible_eda_insight: {e}")
 
-        # fallback锛氫粎褰撶粨鏋勫寲瀛楁娌℃湁缁欏嚭鏄庣‘缁撹鏃舵墠鐢ㄥ叧閿瘝
+        # 只有结构化字段未给出明确结论时才使用关键词回退判断。
         return self._has_any_keyword(fallback_text, [
             "time series", "temporal", "timestamp", "datetime", "鏃跺簭", "鏃堕棿搴忓垪"
         ])
@@ -947,8 +947,8 @@ class SACKCaseRetriever():
             missing_rate_threshold: float = 0.0
     ) -> bool:
         """
-        浼樺厛浠庣粨鏋勫寲EDAInsight鍒ゆ柇褰撳墠鏄惁瀛樺湪缂哄け鍊间俊鍙凤紱
-        鑻ョ己澶憋紝鍐嶅洖閫€鍒版枃鏈叧閿瘝銆?
+        优先从结构化 EDAInsight 判断当前是否存在缺失值信号；
+        如果结构化信息缺失，再回退到文本关键词。
         """
         try:
             data_quality = (
@@ -969,7 +969,7 @@ class SACKCaseRetriever():
         except Exception as e:
             logger.warning(f"Failed to infer missing signal from visible_eda_insight: {e}")
 
-        # fallback锛氫粎褰撶粨鏋勫寲瀛楁缂哄け鏃舵墠鐢ㄥ叧閿瘝
+        # 只有结构化字段缺失时才使用关键词回退判断。
         return self._has_any_keyword(fallback_text, [
             "missing", "null", "nan", "缂哄け"
         ])
@@ -981,7 +981,7 @@ class SACKCaseRetriever():
 
     def _summarize_visible_eda_insight(self, visible_eda_insight: Dict[str, Any],state) -> str:
         """
-        鐢↙LM瀵瑰綋鍓嶉樁娈靛彲瑙佺殑EDAInsight鍋氭憳瑕侊紝
+        用 LLM 概括当前阶段可见的 EDAInsight，
         供Soft Gate使用。
         """
         cache_dir = os.path.join(state.restore_dir, "cache")
@@ -1080,7 +1080,7 @@ class SACKCaseRetriever():
                     reasons, risk_tags, insight
                 )
 
-        # Rule 2: 褰撳墠鏄痶ime series锛屼絾insight鏄庣‘寤鸿random split/kfold => drop
+        # 当前为时间序列任务时，丢弃建议随机划分的经验。
         if gate_context.get("is_time_series", False):
             if self._has_any_keyword(insight_text, [
                 "random split", "shuffle split", "kfold", "stratifiedkfold"
@@ -1094,7 +1094,7 @@ class SACKCaseRetriever():
                     reasons, risk_tags, insight
                 )
 
-        # Rule 3: 褰撳墠瑕佹眰group-aware锛屼絾insight鏄庣‘寤鸿鏅€歴plit => drop
+        # 当前要求分组验证时，丢弃建议普通随机划分的经验。
         if gate_context.get("requires_group_cv", False):
             if self._has_any_keyword(insight_text, [
                 "random split", "kfold", "stratifiedkfold"
@@ -1117,7 +1117,7 @@ class SACKCaseRetriever():
 
     def _contains_explicit_data_modification_for_eda_phase(self, text: str) -> bool:
         """
-        鍙瘑鍒€滄槑纭缓璁鏁版嵁/鐗瑰緛鍋氫慨鏀光€濈殑琛ㄨ揪銆?
+        只识别明确建议修改数据或特征的表述。
         避免把 'standardized analysis pipeline' 这类流程描述误判成数据标准化操作。
         """
         if not text:
@@ -1138,7 +1138,7 @@ class SACKCaseRetriever():
             r"\bfillna\b",
             r"\breplace\s+missing\s+values\b",
 
-            # 缂栫爜
+            # 编码
             r"\btarget\s+encoding\b",
             r"\btarget\s+encode\b",
             r"\bone[\-\s]?hot\s+encoding\b",
@@ -1153,7 +1153,7 @@ class SACKCaseRetriever():
             r"\bnormaliz(e|ed|ing|ation)\s+(the\s+)?(data|dataset|column|columns|feature|features|variable|variables|input|inputs)\b",
             r"\bscal(e|ed|ing)\s+(the\s+)?(data|dataset|column|columns|feature|features|variable|variables|input|inputs)\b",
 
-            # 琚姩/鍚嶈瘝鍖栦絾浠嶆槑纭槸鏁版嵁澶勭悊鍔ㄤ綔
+            # 名词化的描述也可能明确指向数据处理动作。
             r"\b(feature|features|data|dataset|columns?|variables?|inputs?)\s+(were\s+|was\s+)?standardiz(ed|ation)\b",
             r"\b(feature|features|data|dataset|columns?|variables?|inputs?)\s+(were\s+|was\s+)?normaliz(ed|ation)\b",
             r"\b(feature|features|data|dataset|columns?|variables?|inputs?)\s+(were\s+|was\s+)?scal(ed|ing)\b",
@@ -1172,8 +1172,8 @@ class SACKCaseRetriever():
 
     def _is_methodology_or_framework_description(self, text: str) -> bool:
         """
-        鍒ゆ柇杩欐璇濇槸涓嶆槸鍦ㄦ弿杩扳€滃垎鏋愭鏋?鏂规硶璁?娴佺▼瑙勮寖鈥濓紝
-        鑰屼笉鏄缓璁洿鎺ユ敼鏁版嵁銆?
+        判断这段话是否描述分析框架、方法或流程规范，
+        而非建议直接修改数据。
         """
         if not text:
             return False
@@ -1202,7 +1202,7 @@ class SACKCaseRetriever():
         """
         对同一个 competition 下通过 hard gate 的所有 insights 做批量 soft gate。
 
-        杈撳叆 candidates 缁撴瀯:
+        输入 candidates 的结构：
         [
             {
                 "competition_id": ...,
@@ -1212,14 +1212,14 @@ class SACKCaseRetriever():
             ...
         ]
 
-        杩斿洖:
+        返回：
         {
             candidate_id: soft_gate_meta,
             ...
         }
 
-        鍏朵腑 candidate_id = "{pipeline_id}::{insight_id}"
-        鐢ㄤ簬鍦?competition 绾?batch 涓敮涓€鏍囪瘑涓€鏉″€欓€?insight銆?
+        其中 candidate_id = "{pipeline_id}::{insight_id}"
+        在竞赛级批处理中唯一标识一条候选经验。
         """
         if not candidates:
             return {}
@@ -1415,7 +1415,7 @@ class SACKCaseRetriever():
         except Exception:
             pass
 
-        # 灏濊瘯鎻愬彇JSON鏁扮粍
+        # 尝试提取JSON数组
         try:
             match = re.search(r"\[\s*\{.*\}\s*\]", llm_raw, re.DOTALL)
             if match:
@@ -1467,7 +1467,7 @@ class SACKCaseRetriever():
 
         
     def get_similar_comp_coreinsight(self, state: State, retrieval_mode: str = "weighted_topk") -> Dict[str, Any]:
-        """鎵ц妫€绱㈡祦绋嬶紝杩斿洖鏁村悎鍚庣殑妗堜緥淇℃伅"""
+        """执行检索流程，返回整合后的案例信息"""
         # 1. 检索相似竞赛
         similar_comps = self.retrieve_similar_competitions(state, k=5, retrieval_mode=retrieval_mode)
         if self.last_retrieval_error:
@@ -1485,7 +1485,7 @@ class SACKCaseRetriever():
         # 3. 整合结果
         core_insights = self.retrieve_core_insights(competitions=similar_comps, top_pipelines_per_comp=3)
 
-        # 3. 鏁村悎缁撴灉
+        # 3. 整合结果
         comp_insights = self.integrate_insights(similar_comps,core_insights)
 
 
@@ -1502,7 +1502,7 @@ class SACKCaseRetriever():
         return gated_insights
 
     def get_phase_insights_text(self, filtered_insights: Dict) -> str:
-        """灏嗙瓫閫夊悗鐨勬牳蹇冭瑙ｏ紙褰撳墠闃舵锛夋牸寮忓寲涓烘彁绀鸿瘝鏂囨湰锛屾樉寮忓寘鍚鑼僆D渚汸lanner寮曠敤"""
+        """将当前阶段筛选后的核心经验格式化为提示词文本，并附上供 Planner 引用的 ID"""
         if filtered_insights and filtered_insights.get("_retrieval_status") == "failed":
             return (
                 "Knowledge retrieval failed for the current phase. "
@@ -1559,7 +1559,7 @@ class SACKCaseRetriever():
                 else:
                     background = None
 
-                # 2. 娌＄紦瀛樺啀璇诲師鏂囧苟鎬荤粨
+                # 2. 没缓存再读原文并总结
                 if not background:
                     with open(comp_background_path, 'r', encoding='utf-8') as f:
                         raw_background = f.read()
@@ -1632,7 +1632,7 @@ class SACKCaseRetriever():
                             elif reasons:
                                 gate_status_text += f"        Gate Note: {reasons[0]}\n"
                         elif decision == "keep":
-                            # keep鍙互杞绘弿娣″啓淇濈暀锛屼篃鍙互涓嶅啓
+                            # Keep 的结果可简要标注，也可不写。
                             gate_status_text += f"        Gate Status: keep\n"
 
                     ins_part = (
@@ -1651,7 +1651,7 @@ class SACKCaseRetriever():
 
     def get_code_snippets_for_plan(self, plan: str) -> Dict:
         task_code_mapping = {}
-        # 淇锛氬尮閰峉TEP X鍒颁笅涓€涓猄TEP鎴栨枃鏈粨鏉燂紝瀹屾暣鎻愬彇Task鎻忚堪
+        # 匹配 STEP X 到下一 STEP 或文本末尾，完整提取任务描述。
         task_pattern = r"### STEP (\d+)\s+Task: (.*?)(?=\s+### STEP|\Z)"
         # 用re.DOTALL让.匹配换行，re.MULTILINE适配多行
         tasks = re.findall(task_pattern, plan, re.DOTALL | re.MULTILINE)
@@ -1661,7 +1661,7 @@ class SACKCaseRetriever():
             insight_pattern = r"Referenced from: (.*?)(?=\s+Tools, involved features|\Z)"
             insight_match = re.search(insight_pattern, task_desc, re.DOTALL)
             if not insight_match:
-                # 鍗充娇鏃營nsight锛屼篃淇濈暀浠诲姟鎻忚堪锛堥伩鍏嶆楠や涪澶憋級
+                # 没有 Insight 时也保留任务描述，避免步骤丢失。
                 task_code_mapping[step] = {
                     "task_desc": task_desc.strip(),
                     "insights": []
@@ -1672,14 +1672,14 @@ class SACKCaseRetriever():
             insights_str = insight_match.group(1).strip()
             individual_insights = [ins.strip() for ins in insights_str.split(';') if ins.strip()]
 
-            # 鍒濆鍖栧綋鍓嶆楠ょ殑鏄犲皠
+            # 初始化当前步骤的映射。
             task_code_mapping[step] = {
                 "task_desc": task_desc.strip(),
                 "insights": []
             }
 
             for ins in individual_insights:
-                # 淇锛氭纭彁鍙朇ompetition ID銆丳ipeline ID銆両nsight ID
+                # 提取 Competition、Pipeline 和 Insight ID。
                 ins_details = re.search(
                     r"Competition\[([^]]+)\] -> Pipeline\[([^]]+)\] -> Insight\[([^]]+)\]",
                     ins
@@ -1690,7 +1690,7 @@ class SACKCaseRetriever():
                 competition_id = ins_details.group(1)
                 pipeline_id = ins_details.group(2)
                 insight_id = ins_details.group(3)
-                # 淇URI鏍煎紡锛堝幓鎺夊浣欑┖鏍硷級
+                # 规范 URI 格式，去除多余空格。
                 insight_uri = f"http://sack.local/resource/kaggle/{competition_id}/{pipeline_id}/insight/{insight_id}"
 
                 # 检索代码段，异常时保留Insight信息（仅标记失败）
@@ -1698,9 +1698,9 @@ class SACKCaseRetriever():
                     code_snippets = self.sack_knowledge.get_insight_code_snippet(insight_uri=insight_uri)
                 except Exception as e:
                     logger.warning("Failed to retrieve insight %s: %s", insight_uri, e)
-                    code_snippets = []  # 绌哄垪琛紝涓嶄涪澶盜nsight鏉＄洰
+                    code_snippets = []  # 代码片段列表为空时，仍保留 Insight 条目。
 
-                # 娣诲姞鍒板綋鍓嶄换鍔＄殑insights鍒楄〃
+                # 添加到当前任务的insights列表
                 task_code_mapping[step]["insights"].append({
                     "source": ins,
                     "insight_uri": insight_uri,

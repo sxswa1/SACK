@@ -69,10 +69,10 @@ def create_competition_embedding_db(competition_db_name):
         # 2. 连接新建的竞赛数据库，创建表和索引
         conn = _connect_postgres(competition_db_name)
         cursor = conn.cursor()
-        # 鍚敤vector鎵╁睍锛堝瓨鍌ㄥ悜閲忓繀澶囷級
+        # 启用 vector 扩展，以存储向量。
         cursor.execute('CREATE EXTENSION IF NOT EXISTS vector;')
 
-        # 3. 鍒涘缓绔炶禌琛紙瀛楁瀵瑰簲绔炶禌鐗瑰緛锛欼D銆佸悕绉般€佹杩般€佹暟鎹弿杩般€佺粨鏋勫寲瑕佺礌鍙婂祵鍏ュ悜閲忥級
+        # 创建竞赛表，存储 ID、名称、描述、数据描述和嵌入向量。
         cursor.execute(f'''CREATE TABLE {competition_db_name} (
             competition_id text primary key,  
             competition_name text,            
@@ -83,11 +83,11 @@ def create_competition_embedding_db(competition_db_name):
             data_description_embedding vector(300)  
         );''')
 
-        # 4. 鍒涘缓绱㈠紩锛堝姞閫熸煡璇㈠拰鍚戦噺鐩镐技搴︽绱級
+        # 创建索引，加快查询和向量相似度计算。
         # 4. 创建索引（加速查询和向量相似度检索）
         cursor.execute(f'CREATE INDEX ON {competition_db_name} (competition_name);')
-        cursor.execute(f'CREATE INDEX ON {competition_db_name} USING GIN (structured_elements);')  # jsonb瀛楁鐢℅IN绱㈠紩
-        # 鍚戦噺瀛楁绱㈠紩锛堢敤hnsw绠楁硶鍔犻€熶綑寮︾浉浼煎害妫€绱級
+        cursor.execute(f'CREATE INDEX ON {competition_db_name} USING GIN (structured_elements);')  # 对 jsonb 字段创建 GIN 索引。
+        # 对向量字段创建 HNSW 余弦相似度索引。
         cursor.execute(f'CREATE INDEX ON {competition_db_name} USING hnsw (overview_embedding vector_cosine_ops);')
         cursor.execute(f'CREATE INDEX ON {competition_db_name} USING hnsw (data_description_embedding vector_cosine_ops);')
 
@@ -125,12 +125,12 @@ def insert_competition(competition_data, db_name):
     conn = _connect_postgres(db_name)
     cursor = conn.cursor()
     try:
-        # 鍏抽敭淇锛氱敤Json()鍖呰structured_elements锛堢5涓厓绱狅級
+        # 用 Json() 包装 structured_elements 后写入 JSONB。
         # 关键修复：用Json()包装structured_elements（第5个元素）
         adapted_data = [
             (
                 item[0], item[1], item[2], item[3], 
-                Json(item[4]),  # 鏄惧紡杞崲涓篜ostgreSQL jsonb绫诲瀷
+                Json(item[4]),  # 显式转换为 PostgreSQL jsonb 类型。
                 item[5], item[6]
             ) 
             for item in competition_data
@@ -140,7 +140,7 @@ def insert_competition(competition_data, db_name):
         print(f"Error inserting competition data: {e}")
     finally:
         cursor.close()
-        conn.close()  # 纭繚杩炴帴鍏抽棴
+        conn.close()  # 确保数据库连接关闭。
 
 
 def populate_embeddings(column_profiles_path, column_embedding_db_name, competition_embeddings_db_name):

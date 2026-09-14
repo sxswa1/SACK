@@ -29,9 +29,9 @@ class Reader(Agent):
         history = []
         # Understand Background read the overview.txt, generate competition_info.txt
         if len(state.memory) == 1: # if there is no memory before, it means it is the first execution
-            history.append({"role": "system", "content": f"{role_prompt}{self.description}"}) # 鍒濆鐨勮鑹插拰鎻忚堪
+            history.append({"role": "system", "content": f"{role_prompt}{self.description}"}) # 初始化角色和描述。
             # 模拟多轮对话实现对整个竞赛背景信息的获取与问题理解
-            # round 0   鏄庣‘鑱岃兘锛坮eader鍙弬涓庣涓€涓樁娈碉紝鎵€浠ヨ亴鑳藉拰闃舵鎸傞挬锛岀浉瀵规槑纭級
+            # Round 0：说明 Reader 的职责和当前阶段。
             task = PROMPT_READER_TASK
             input = PROMPT_READER.format(phases_in_context=state.context, task=task)
             raw_reply, history = self.llm.generate(input, history, max_completion_tokens=4096)
@@ -46,12 +46,12 @@ class Reader(Agent):
 
         else: # if there is memory before, concatenate the results of the reader in the previous memory as experience
             self.description = "You are good at reading document and summarizing information." \
-                            "You have advanced reasoning abilities and can improve your answers through reflection."# 娣诲姞鎺ㄧ悊鍜屽弽鎬濈殑prompt
+                            "You have advanced reasoning abilities and can improve your answers through reflection."# 添加推理和反思的prompt
             experience_with_suggestion = self._gather_experience_with_suggestion(state)
             history.append({"role": "system", "content": f"{role_prompt} {self.description}"})
             # round 0
             task = PROMPT_READER_TASK
-            input = PROMPT_READER_WITH_EXPERIENCE_ROUND0.format(phases_in_context=state.context, task=task, experience_with_suggestion=experience_with_suggestion)# 浣跨敤娣诲姞浜唀xperience鐨刾rompt锛堢敤langchain寰堝鏄撳疄鐜帮級
+            input = PROMPT_READER_WITH_EXPERIENCE_ROUND0.format(phases_in_context=state.context, task=task, experience_with_suggestion=experience_with_suggestion)# 使用包含已有经验的提示词。
             raw_reply, history = self.llm.generate(input, history, max_completion_tokens=4096)
             # round 1
             input = f"# OVERVIEW #\n{overview}\n############# "
@@ -62,17 +62,17 @@ class Reader(Agent):
             input = PROMPT_READER_WITH_EXPERIENCE_ROUND2
             raw_reply, history = self.llm.generate(input, history, max_completion_tokens=4096)
 
-        result = raw_reply # 宸茬粡鏍煎紡鍖栦簡
-        reply = self._parse_markdown(raw_reply)# 鍘绘帀鍓嶅悗markdown鏍煎紡鏍囪瘑
+        result = raw_reply # 已经格式化了
+        reply = self._parse_markdown(raw_reply)# 去掉前后markdown格式标识
 
         summary = reply
 
         # save history
-        with open(f'{state.restore_dir}/{self.role}_history.json', 'w', encoding='utf-8') as f:  # 淇濆瓨鍘嗗彶
+        with open(f'{state.restore_dir}/{self.role}_history.json', 'w', encoding='utf-8') as f:  # 保存历史
             json.dump(history, f,ensure_ascii=False, indent=4)
-        with open(f'{state.competition_dir}/competition_info.txt', 'w', encoding='utf-8') as f:  # 淇濆瓨markdown text
+        with open(f'{state.competition_dir}/competition_info.txt', 'w', encoding='utf-8') as f:  # 保存markdown text
             f.write(summary)
-        with open(f'{state.restore_dir}/{self.role}_reply.txt', 'w', encoding='utf-8') as f:  # 淇濆瓨鏈€鍚庢牸寮忓寲鍚庣殑杈撳嚭
+        with open(f'{state.restore_dir}/{self.role}_reply.txt', 'w', encoding='utf-8') as f:  # 保存最终格式化的输出。
             f.write(raw_reply)
         with open(f'{state.restore_dir}/{self.role}_mid_reply.txt', 'w', encoding='utf-8') as f:  # 保存中间问题理解的输出
             f.write(reader_mid_reply)
