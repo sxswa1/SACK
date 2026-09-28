@@ -1,0 +1,13 @@
+name: sack-tugraph-test
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      - astor==0.8.1
+      - camelsplit==1.0.1
+      - numpy==1.24.4
+      - neo4j==4.4.12
+      - pandas==2.0.3
+      - pytest==8.3.5

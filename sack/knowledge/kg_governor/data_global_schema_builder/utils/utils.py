@@ -95,5 +95,5 @@ def generate_label(col_name: str, lan: str) -> Label:
         col_name = re.sub('.csv', '', col_name)
     col_name = re.sub('[^0-9a-zA-Z]+', ' ', col_name)
     text = " ".join(camelsplit(col_name.strip()))
-    text = re.sub('\s+', ' ', text.strip())
+    text = re.sub(r'\s+', ' ', text.strip())
     return Label(text.lower(), lan)

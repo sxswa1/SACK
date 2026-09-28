@@ -500,7 +500,7 @@ def save_complete_analysis_result(analysis_result: Dict, output_path: str,
 
 
 def save_pipeline_metadata(pipeline_info, libraries, nodes, file_elements, output_path, dataset_name, pipeline_id):
-    """保存pipeline的完整元数据，用于生成library.ttl和default.ttl"""
+    """保存可无损重放的 Pipeline 元数据，用于 RDF 汇总和 CIR 迁移。"""
     dataset_dir = os.path.join(output_path, dataset_name)
     os.makedirs(dataset_dir, exist_ok=True)
 
@@ -511,10 +511,13 @@ def save_pipeline_metadata(pipeline_info, libraries, nodes, file_elements, outpu
 
     # 构建完整的元数据
     metadata = {
+        "metadata_version": 2,
         "pipeline_id": pipeline_id,
         "dataset_name": dataset_name,
         "pipeline_info": pipeline_info,
         "libraries": serializable_libraries,
+        "nodes": nodes,
+        "file_elements": file_elements,
         "nodes_count": len(nodes),
         "file_elements_count": len(file_elements),
     }

@@ -6,6 +6,7 @@ import pandas as pd
 import os
 from sack.knowledge.api.utils import profile_single_competition,get_current_competition_edainsight   # 导入utils方法
 from sack.knowledge.storage_utils.get_current_comp_eda_files import copy_eda_files
+from sack.knowledge.stores.factory import create_agent_graph_store
 from tqdm import tqdm
 import json
 
@@ -22,9 +23,16 @@ class SACKKnowledgeBase:
                  pg_password: str = 'postgres',
                  pg_competition_db: str = SACKKnowledgeConfig.competition_embeddings_db_name,  # 竞赛嵌入库名
                  pg_column_db: str = SACKKnowledgeConfig.column_embeddings_db_name,  # 列嵌入库名
-                 pg_port: str =SACKKnowledgeConfig.postgresql_port
+                 pg_port: str =SACKKnowledgeConfig.postgresql_port,
+                 graph_store=None,
+                 graph_backend: str = None,
                  ):
         self.conn = connect_to_graphdb(endpoint, graphdb_repo=db)
+        self.graph_store = (
+            graph_store
+            if graph_store is not None
+            else create_agent_graph_store(backend=graph_backend)
+        )
         self.pg_competition_conn = connect_to_postgres(host=pg_host, user=pg_user, password=pg_password, dbname=pg_competition_db,port=pg_port)
         self.pg_col_conn = connect_to_postgres(host= pg_host, user= pg_user, password= pg_password, dbname= pg_column_db, port= pg_port)
         self.pg_competition_table = pg_competition_db
@@ -152,6 +160,8 @@ class SACKKnowledgeBase:
         return get_most_recent_pipeline(self.conn, dataset, show_query)
 
     def get_top_k_scoring_pipelines_for_dataset(self, dataset: str = '', k: int = None, show_query=False):
+        if self.graph_store is not None:
+            return self.graph_store.get_top_pipelines(dataset or None, k)
         return get_top_k_scoring_pipelines_for_dataset(self.conn, dataset, k, show_query)
 
     def get_most_popular_parameters(self, library: str, parameters='all'):
@@ -388,6 +398,7 @@ class SACKKnowledgeBase:
         # 4. 构造配置并调用核心函数（与原逻辑一致）
         core_config = {
             "graphdb_conn": self.conn,
+            "graph_store": self.graph_store,
             "pg_competition_conn": self.pg_competition_conn,
             "pg_col_conn": self.pg_col_conn,
             "pg_competition_table": self.pg_competition_table,
@@ -450,9 +461,13 @@ class SACKKnowledgeBase:
                 ("http://", "https://")):
             raise ValueError("pipeline_uri必须为非空字符串且以http://或https://开头")
 
+        if self.graph_store is not None:
+            return self.graph_store.get_core_insights(pipeline_uri)
+
         # 2. 构建配置
         core_config = {
             "graphdb_conn": self.conn,
+            "graph_store": self.graph_store,
             "pg_competition_conn": self.pg_competition_conn,
             "pg_col_conn": self.pg_col_conn
         }
@@ -496,8 +511,12 @@ class SACKKnowledgeBase:
         if not field or not isinstance(field, str):
             raise ValueError("field必须为非空字符串")
 
+        if self.graph_store is not None:
+            return self.graph_store.get_competition_field(competition_uri, field)
+
         core_config = {
-            "graphdb_conn": self.conn
+            "graphdb_conn": self.conn,
+            "graph_store": self.graph_store,
         }
 
         try:
@@ -532,8 +551,24 @@ class SACKKnowledgeBase:
         if not insight_uri or not isinstance(insight_uri, str):
             raise ValueError("insight_uri必须为非空字符串（格式：pipeline_uri/insight/insight_id）")
 
+        if self.graph_store is not None:
+            snippets = self.graph_store.get_insight_code(insight_uri)
+            return [
+                {
+                    "stmt_uri": {"type": "uri", "value": item["stmt_uri"]},
+                    "code_text": {"type": "literal", "value": item["code_text"]},
+                    "order": {
+                        "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+                        "type": "literal",
+                        "value": str(item["order"]),
+                    },
+                }
+                for item in snippets
+            ] or None
+
         core_config = {
-            "graphdb_conn": self.conn
+            "graphdb_conn": self.conn,
+            "graph_store": self.graph_store,
         }
 
         try:
@@ -566,9 +601,13 @@ class SACKKnowledgeBase:
                 ("http://", "https://")):
             raise ValueError("competition_uri必须为非空字符串且以http://或https://开头")
 
+        if self.graph_store is not None:
+            return self.graph_store.get_eda_insight(competition_uri, eda_type)
+
         # 2. 构建配置
         core_config = {
-            "graphdb_conn": self.conn
+            "graphdb_conn": self.conn,
+            "graph_store": self.graph_store,
         }
 
         # 3. 调用核心函数
@@ -646,7 +685,10 @@ class SACKKnowledgeBase:
         current_comp_edainsight = get_current_competition_edainsight(comp_path)# 直接从当前竞赛数据里获取拷贝的edainsight
 
         # 调用核心函数
-        core_config = {"graphdb_conn": self.conn}
+        core_config = {
+            "graphdb_conn": self.conn,
+            "graph_store": self.graph_store,
+        }
         results = get_top_k_edainsight_similar_competitions_core(
             config=core_config,
             current_comp_info=current_comp_info,

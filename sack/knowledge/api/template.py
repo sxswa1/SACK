@@ -1,3 +1,4 @@
+import ast
 import pandas as pd
 import zlib
 import fasttext
@@ -24,6 +25,25 @@ PREFIXES = """
     PREFIX lib: <http://sack.local/resource/library/> 
     PREFIX sackData: <http://sack.local/ontology/data/>
     """
+
+
+def _configured_graph_store(config):
+    """Return the optional domain store used during GraphDB/TuGraph migration."""
+
+    return config.get("graph_store") if isinstance(config, dict) else None
+
+
+def get_competition_name(config: dict, competition_uri: str) -> str:
+    graph_store = _configured_graph_store(config)
+    if graph_store is not None:
+        return graph_store.get_competition_name(competition_uri) or "Unknown"
+    graphdb_conn = config["graphdb_conn"]
+    query = PREFIXES + f"""
+    SELECT ?comp_name
+    WHERE {{ <{competition_uri}> a sack:Dataset ; rdfs:label ?comp_name . }}
+    """
+    results = query_graphdb(graphdb_conn, query, return_type="json")
+    return results[0]["comp_name"]["value"] if results else "Unknown"
 
 
 def query_sack_knowledge(config, rdf_query):
@@ -1067,10 +1087,19 @@ TYPE_COMPATIBILITY = {
 
 def filter_candidate_competitions(config: dict, current_problem_type: str, current_data_type: str, current_comp_id: str,
                                   show_query: bool = False) -> list:
-    graphdb_conn = config["graphdb_conn"]
     # 1. 补全当前竞赛的完整URI（对齐图谱中的comp_uri格式）
     # 图谱中comp_uri是“http://sack.local/resource/xxx”，current_comp_id是“kaggle/playground-series-s3e8”
     full_current_comp_uri = f"http://sack.local/resource/{current_comp_id}"
+
+    graph_store = _configured_graph_store(config)
+    if graph_store is not None:
+        return graph_store.find_candidate_competitions(
+            current_problem_type,
+            current_data_type,
+            full_current_comp_uri,
+        )
+
+    graphdb_conn = config["graphdb_conn"]
 
     # 2. 修复：用全局PREFIXES，不重复声明前缀，谓词用data:
     sparql_query = PREFIXES + f"""
@@ -1207,99 +1236,108 @@ def get_competition_tables(
         }, ...]
     }, ...]
     """
-    graphdb_conn = config["graphdb_conn"]
     pg_col_conn = config["pg_col_conn"]
+    graph_store = _configured_graph_store(config)
+    graph_tables = []
+    if graph_store is not None:
+        graph_tables = graph_store.get_competition_tables(comp_uri)
+    else:
+        graphdb_conn = config["graphdb_conn"]
+        table_query = PREFIXES + f"""
+        SELECT DISTINCT ?table_uri ?table_name
+        WHERE {{
+            ?table_uri a sack:Table ;
+                       <http://sack.local/ontology/isPartOf> ?comp_uri ;
+                       schema:name ?table_name .
+            ?comp_uri a sack:Dataset .
+            VALUES ?comp_uri {{ <{comp_uri}> }}
+        }}
+        """
+        if show_query:
+            print(f"\n=== 查询竞赛 {comp_uri} 的表 ===")
+            print(table_query)
+        table_results = query_graphdb(graphdb_conn, table_query, return_type="json")
+        for table_res in table_results or []:
+            table_uri = table_res["table_uri"]["value"]
+            col_query = PREFIXES + f"""
+            SELECT DISTINCT ?col_uri ?col_name ?data_type
+            WHERE {{
+                ?col_uri a sack:Column ;
+                         <http://sack.local/ontology/isPartOf> ?table_uri ;
+                         schema:name ?col_name ;
+                         <http://sack.local/ontology/data/hasDataType> ?data_type .
+                VALUES ?table_uri {{ <{table_uri}> }}
+            }}
+            """
+            col_results = query_graphdb(graphdb_conn, col_query, return_type="json")
+            graph_tables.append(
+                {
+                    "table_uri": table_uri,
+                    "table_name": table_res["table_name"]["value"],
+                    "columns": [
+                        {
+                            "col_uri": value["col_uri"]["value"],
+                            "col_name": value["col_name"]["value"],
+                            "data_type": value["data_type"]["value"],
+                        }
+                        for value in col_results or []
+                    ],
+                }
+            )
 
-    # Step 1: 用三元组查询竞赛的所有表（严格遵循sack:isPartOf）
-    table_query = PREFIXES + f"""
-    SELECT DISTINCT ?table_uri ?table_name
-    WHERE {{
-        ?table_uri a sack:Table ;  # 表的类型是sack:Table
-                   <http://sack.local/ontology/isPartOf> ?comp_uri ;  # 表是竞赛的一部分（部分→整体）
-                   schema:name ?table_name .  # 表名
-        ?comp_uri a sack:Dataset ;  # 确认竞赛的类型（根据实际数据调整，可能是sack:Competition）
-        VALUES ?comp_uri {{ <{comp_uri}> }}  # 限定目标竞赛
-    }}
-    """
-    if show_query:
-        print(f"\n=== 查询竞赛 {comp_uri} 的表 ===")
-        print(table_query)
-
-    # 执行SPARQL查询，获取竞赛的所有表
-    table_results = query_graphdb(graphdb_conn, table_query, return_type='json')
-    if not table_results:
+    if not graph_tables:
         print(f"竞赛 {comp_uri} 未查询到表")
         return []
 
+    def parse_embedding(value):
+        if isinstance(value, (list, tuple)):
+            return list(value)
+        if not isinstance(value, str):
+            raise ValueError(f"无法解析嵌入类型：{type(value).__name__}")
+        parsed = ast.literal_eval(value)
+        if not isinstance(parsed, (list, tuple)):
+            raise ValueError("嵌入必须是列表")
+        return list(parsed)
+
     competition_tables = []
-    for table_res in table_results:
-        table_uri = table_res["table_uri"]["value"]
-        table_name = table_res["table_name"]["value"]
-
-        # Step 2: 用三元组查询当前表的所有列（表→列的isPartOf关系）
-        col_query = PREFIXES + f"""
-        SELECT DISTINCT ?col_uri ?col_name ?data_type
-        WHERE {{
-            ?col_uri a sack:Column ;
-                     <http://sack.local/ontology/isPartOf> ?table_uri ;  # 表→列的isPartOf关系
-                     schema:name ?col_name ;
-                     <http://sack.local/ontology/data/hasDataType> ?data_type .  # 列数据类型
-            VALUES ?table_uri {{ <{table_uri}> }}  # 限定目标表
-        }}
-        """
-        col_results = query_graphdb(graphdb_conn, col_query, return_type='json')
-        if not col_results:
-            print(f"表 {table_uri} 未查询到列，跳过")
-            continue
-
-        # Step 3: 从PostgreSQL查询列的嵌入（label_embedding/content_embedding）
+    for table in graph_tables:
         table_columns = []
-        for col_res in col_results:
-            col_uri = col_res["col_uri"]["value"]
-            col_name = col_res["col_name"]["value"]
-            data_type = col_res["data_type"]["value"]
-
-            # 对每个col_uri进行清洗
-            cleaned_col_uri = clean_col_uri(col_uri)
-            # 用清洗后的id查询
+        for column in table["columns"]:
+            col_uri = column["col_uri"]
             pg_query = f"""
             SELECT label_embedding, content_embedding
             FROM {config.get("pg_column_table", SACKKnowledgeConfig.column_embeddings_db_name)}
-            WHERE id = %s;  -- 此时参数是清洗后的id（如kaggle/...）
+            WHERE id = %s;
             """
-            pg_params = (cleaned_col_uri,)  # 传递清洗后的参数
             col_emb_results = query_postgres(
                 pg_conn=pg_col_conn,
                 query=pg_query,
-                params=pg_params,
-                return_type='json'
+                params=(clean_col_uri(col_uri),),
+                return_type="json",
             )
-
             if not col_emb_results:
                 print(f"列 {col_uri} 未查询到嵌入，跳过")
                 continue
-
-            # 解析嵌入（PG中可能存储为字符串，需转换为列表）
-            label_emb = eval(col_emb_results[0]["label_embedding"])  # 需确保PG存储格式与解析匹配
-            content_emb = eval(col_emb_results[0]["content_embedding"])
-
-            table_columns.append({
-                "col_uri": col_uri,
-                "col_name": col_name,
-                "data_type": data_type,
-                "label_embedding": label_emb,
-                "content_embedding": content_emb,
-                "dataset_name": comp_uri.split("/")[-1]  # 关联竞赛短ID，用于过滤
-            })
-
-        # 只有包含列的表才加入列表
+            table_columns.append(
+                {
+                    **column,
+                    "label_embedding": parse_embedding(
+                        col_emb_results[0]["label_embedding"]
+                    ),
+                    "content_embedding": parse_embedding(
+                        col_emb_results[0]["content_embedding"]
+                    ),
+                    "dataset_name": comp_uri.split("/")[-1],
+                }
+            )
         if table_columns:
-            competition_tables.append({
-                "table_uri": table_uri,
-                "table_name": table_name,
-                "columns": table_columns
-            })
-
+            competition_tables.append(
+                {
+                    "table_uri": table["table_uri"],
+                    "table_name": table["table_name"],
+                    "columns": table_columns,
+                }
+            )
     return competition_tables
 
 
@@ -1381,6 +1419,10 @@ def calculate_table_pair_similarity(
 
 
 def query_all_competitions_fields(config: dict, show_query: bool = False) -> list:
+    graph_store = _configured_graph_store(config)
+    if graph_store is not None:
+        return graph_store.list_competitions()
+
     graphdb_conn = config["graphdb_conn"]
     # 关键修复：1. 不再重复声明sack_knowledge/rdfs前缀（全局PREFIXES已包含）；2. 用data:前缀对齐谓词
     sparql_query = PREFIXES + """
@@ -1483,13 +1525,7 @@ def get_top_k_similar_competitions_core(
     # 新增日志：打印每个候选竞赛的语义相似度得分
     print("\n【语义相似度得分】（基于竞赛概述匹配）")
     for comp_uri in candidate_comp_uris:
-        comp_name = "Unknown"
-        # 快速获取竞赛名（避免重复查询，也可复用后续查询结果）
-        graphdb_conn = config["graphdb_conn"]
-        query = PREFIXES + f"SELECT ?comp_name WHERE {{ <{comp_uri}> a sack:Dataset ; rdfs:label ?comp_name . }}"
-        comp_name_res = query_graphdb(graphdb_conn, query, return_type='json')
-        if comp_name_res:
-            comp_name = comp_name_res[0]["comp_name"]["value"]
+        comp_name = get_competition_name(config, comp_uri)
         score = semantic_scores.get(comp_uri, 0.0)
         print(f"  竞赛: {comp_name}（ID: {comp_uri.split('/')[-1]}） → 语义得分: {score:.3f}")
     print("=" * 50)
@@ -1511,12 +1547,7 @@ def get_top_k_similar_competitions_core(
     # 新增日志：打印每个候选竞赛的宏观数据得分
     print("\n【宏观数据相似度得分】（基于数据描述匹配）")
     for comp_uri in candidate_comp_uris:
-        comp_name = "Unknown"
-        graphdb_conn = config["graphdb_conn"]
-        query = PREFIXES + f"SELECT ?comp_name WHERE {{ <{comp_uri}> a sack:Dataset ; rdfs:label ?comp_name . }}"
-        comp_name_res = query_graphdb(graphdb_conn, query, return_type='json')
-        if comp_name_res:
-            comp_name = comp_name_res[0]["comp_name"]["value"]
+        comp_name = get_competition_name(config, comp_uri)
         score = macro_data_scores.get(comp_uri, 0.0)
         print(f"  竞赛: {comp_name}（ID: {comp_uri.split('/')[-1]}） → 宏观数据得分: {score:.3f}")
     print("=" * 50)
@@ -1534,12 +1565,7 @@ def get_top_k_similar_competitions_core(
             continue
 
         # 获取竞赛名（用于日志）
-        comp_name = "Unknown"
-        graphdb_conn = config["graphdb_conn"]
-        query = PREFIXES + f"SELECT ?comp_name WHERE {{ <{comp_uri}> a sack:Dataset ; rdfs:label ?comp_name . }}"
-        comp_name_res = query_graphdb(graphdb_conn, query, return_type='json')
-        if comp_name_res:
-            comp_name = comp_name_res[0]["comp_name"]["value"]
+        comp_name = get_competition_name(config, comp_uri)
 
         print(f"\n  正在处理竞赛: {comp_name}（ID: {comp_uri.split('/')[-1]}）")
         print(f"    目标竞赛包含 {len(target_tables)} 张表：{[t['table_name'] for t in target_tables]}")
@@ -1585,12 +1611,7 @@ def get_top_k_similar_competitions_core(
     # 3.3 融合宏观+微观得分
     print("\n【融合数据得分】（宏观30% + 微观70%）")
     for comp_uri in candidate_comp_uris:
-        comp_name = "Unknown"
-        graphdb_conn = config["graphdb_conn"]
-        query = PREFIXES + f"SELECT ?comp_name WHERE {{ <{comp_uri}> a sack:Dataset ; rdfs:label ?comp_name . }}"
-        comp_name_res = query_graphdb(graphdb_conn, query, return_type='json')
-        if comp_name_res:
-            comp_name = comp_name_res[0]["comp_name"]["value"]
+        comp_name = get_competition_name(config, comp_uri)
 
         macro_score = macro_data_scores.get(comp_uri, 0.0)
         micro_score = micro_data_scores.get(comp_uri, 0.0)
@@ -1605,15 +1626,8 @@ def get_top_k_similar_competitions_core(
 
     # 4. 融合得分并生成结果DataFrame
     result_data = []
-    graphdb_conn = config["graphdb_conn"]
     for comp_uri in candidate_comp_uris:
-        # 获取竞赛名
-        query = PREFIXES + f"""
-        SELECT ?comp_name 
-        WHERE {{ <{comp_uri}> a sack:Dataset ; rdfs:label ?comp_name . }}
-        """
-        comp_name_res = query_graphdb(graphdb_conn, query, return_type='json')
-        comp_name = comp_name_res[0]["comp_name"]["value"] if comp_name_res else "Unknown"
+        comp_name = get_competition_name(config, comp_uri)
 
         # 提取得分
         sem_score = semantic_scores.get(comp_uri, 0.0)
@@ -1839,6 +1853,10 @@ def get_edainsight_for_competitions_core(
     if eda_type not in ["pre_eda", "deep_eda"]:
         raise ValueError(f"eda_type无效：{eda_type}")
 
+    graph_store = _configured_graph_store(config)
+    if graph_store is not None:
+        return graph_store.get_eda_insight(competition_uri, eda_type)
+
     # 日志打印
     print("=" * 60)
     print(f"【EDAInsight查询】目标竞赛URI：{competition_uri}")
@@ -1991,4 +2009,3 @@ def get_top_k_edainsight_similar_competitions_core(
     # 按总相似度降序排序，取Top-K
     similarity_results.sort(key=lambda x: x["pre_eda_data_quality"], reverse=True)
     return similarity_results
-
