@@ -1,0 +1,44 @@
+{
+  "backend": "tugraph",
+  "checks": {
+    "rawdata_unchanged": true,
+    "eda_status_success": true,
+    "pre_insight_extraction": {
+      "unknowns": 0,
+      "required_fields_and_tools_complete": true
+    },
+    "deep_insight_extraction": {
+      "unknowns": 0,
+      "required_fields_and_tools_complete": true
+    },
+    "cleaned_train.csv": true,
+    "cleaned_test.csv": true,
+    "processed_train.csv": true,
+    "processed_test.csv": true,
+    "profile": {
+      "train.csv": 12,
+      "test.csv": 11
+    },
+    "predictions": {
+      "path": "/opt/sack-backend-compare-20261004-fix11/tugraph/repo/data/competitions/titanic/submission.csv",
+      "rows": 418,
+      "columns": [
+        "id",
+        "Survived"
+      ],
+      "binary_labels": true,
+      "original_submission_schema_matches": false
+    }
+  },
+  "errors": [
+    {
+      "check": "exit_success_and_not_stopped",
+      "error": "exit_success_and_not_stopped"
+    },
+    {
+      "check": "dsp_completion_logged",
+      "error": "dsp_completion_logged"
+    }
+  ],
+  "accepted": false
+}

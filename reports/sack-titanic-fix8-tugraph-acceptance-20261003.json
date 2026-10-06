@@ -1,0 +1,41 @@
+{
+  "backend": "tugraph",
+  "checks": {
+    "rawdata_unchanged": true,
+    "pre_insight_extraction": {
+      "unknowns": 0,
+      "required_fields_and_tools_complete": true
+    },
+    "cleaned_train.csv": true,
+    "cleaned_test.csv": true,
+    "processed_train.csv": true,
+    "processed_test.csv": true,
+    "profile": {
+      "train.csv": 12,
+      "test.csv": 11
+    }
+  },
+  "errors": [
+    {
+      "check": "exit_success_and_not_stopped",
+      "error": "exit_success_and_not_stopped"
+    },
+    {
+      "check": "dsp_completion_logged",
+      "error": "dsp_completion_logged"
+    },
+    {
+      "check": "eda_status_success",
+      "error": "eda_status_success"
+    },
+    {
+      "check": "deep_insight_extraction",
+      "error": ""
+    },
+    {
+      "check": "predictions",
+      "error": "[Errno 2] No such file or directory: '/opt/sack-backend-compare-20261003-fix8/tugraph/repo/data/competitions/titanic/submission.csv'"
+    }
+  ],
+  "accepted": false
+}

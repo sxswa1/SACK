@@ -15,6 +15,8 @@ logger.setLevel(logging.INFO)
 from sack.Agents.agent_base import Agent
 from sack.utils import read_file
 from sack.state import State
+from sack.runtime_support import extract_stage_body, strip_stage_output, validate_eda_tool_keywords, ToolCallError
+from sack.paths import SACK_PACKAGE_DIR
 from sack.Prompts.prompt_base import *
 from sack.Prompts.prompt_developer import *
 
@@ -30,77 +32,30 @@ class Developer(Agent):
 
     def _is_previous_code(self, state: State) -> Tuple[bool, str, str,str]: # 提取前一相关阶段的代码，跳过 EDA 阶段。
         previous_phase = state.get_previous_phase()
+        if previous_phase is None:
+            return False, "", "", ""
         previous_dir_name = state.phase_to_directory[previous_phase]
         path_to_previous_code = f'{state.competition_dir}/{previous_dir_name}/{previous_dir_name}_code.py'
         path_to_previous_run_code = f'{state.competition_dir}/{previous_dir_name}/{previous_dir_name}_run_code.py'
         path_to_last_phase_code = f'{state.competition_dir}/{previous_dir_name}/single_phase_code.txt'
         return os.path.exists(path_to_previous_code), path_to_previous_code, path_to_previous_run_code, path_to_last_phase_code
 
-    def _delete_output_in_code(self, state: State, previous_code) -> str:  # 删除所有包含绘图的for循环  以及print plt 其他绘图代码（这些代码段无法调试，需要去除后才能调试代码）
-        previous_run_code = copy.deepcopy(previous_code) # deep copy to prevent modifying the original data
-        keywords = ('sns.', '.plot', '.hist', '.plt') # 绘图代码的关键词。
-
-        # first scan: identify for loops, replace the whole block
-        for_loop_list = []  # 所有for循环的开始和结束行索引
-        in_for_loop = False
-        # pdb.set_trace()
-        for i, line in enumerate(previous_run_code):
-            if line.startswith('    for'): # 识别 for 循环。
-                tmp_loop = []
-                indent = line[:len(line) - len(line.lstrip())]  # 获取缩进部分。
-                tmp_loop.append(i) # 记录 for 循环的起始行索引。
-                in_for_loop = True
-            elif in_for_loop and line.startswith(indent) and not line.startswith('    '+indent) and len(line.strip()) > 0:  # 跳出for循环后的一行
-                tmp_loop.append(i) # record the end line of the for loop
-                in_for_loop = False
-                for_loop_list.append(tmp_loop)
-
-        # reverse order replace for loops with '    pass'
-        for start, end in for_loop_list[::-1]: # 从后往前 将所有包含绘图的for循环都替换成pass
-            loop_code = "\n".join(previous_run_code[start:end])
-            if any(keyword in loop_code for keyword in keywords):  # if the for loop contains keywords
-                previous_run_code[start:end] = ['    pass\n']  # replace the corresponding lines
-
-        # second scan: replace print and plt.show / plt.save lines, keep the indent
-        start_signs = ('print', 'plt')
-        for i, line in enumerate(previous_run_code): # 将 print、plt 及其他绘图语句替换为 pass。
-            stripped_line = line.lstrip()
-            if stripped_line.startswith(start_signs) or any(keyword in stripped_line for keyword in keywords):
-                indent = line[:len(line) - len(stripped_line)]  # get the indent part
-                previous_run_code[i] = indent + 'pass\n'
-        
-        # third scan: merge consecutive pass lines  如果有连续的pass 则合并
-        new_code = []
-        pass_found = False
-        
-        for line in previous_run_code:
-            if line.strip() == 'pass':
-                if not pass_found:  # first time encounter pass
-                    new_code.append(line)
-                    pass_found = True
-            else:
-                new_code.append(line)
-                pass_found = False
-        
-        return new_code
+    def _delete_output_in_code(self, state: State, previous_code) -> list:
+        """Remove complete output statements without corrupting multiline code."""
+        return strip_stage_output(previous_code)
 
     def _generate_code_file(self, state: State, raw_reply) -> Tuple[bool, str, str]:  # 把返回的代码生成代码文件，里边添加了import头，并把生成的代码封装成了函数
         is_previous_code, path_to_previous_code, _, _ = self._is_previous_code(state)
         previous_tools= []
         if is_previous_code: # 提取代码主体。
             with open(path_to_previous_code, 'r', encoding='utf-8') as f_1:
-                previous_code = f_1.readlines()
-                previous_code = previous_code[:-2] # delete the last two lines  这些是手动添加的execute代码段
+                previous_code = extract_stage_body(f_1.read())
                 previous_phase= state.get_previous_phase(type='code') # 只返回一个阶段
                 if state.phase != 'Model Building, Validation, and Prediction':
                     previous_tools = state.phase_to_ml_tools[previous_phase]
                 else:
                     previous_previous_tools = state.phase_to_ml_tools["Data Cleaning"]
                     previous_tools = state.phase_to_ml_tools[previous_phase] + previous_previous_tools
-                if len(previous_tools):
-                    previous_code = previous_code[8+2+len(previous_tools):] # 这些是前缀import的代码段，剩下的就是前一个阶段生成的代码  有工具就是工具数+2行
-                else:
-                    previous_code = previous_code[8+1:] # 没有工具导入时，跳过一行空行。
             previous_run_code = self._delete_output_in_code(state, previous_code) # 删除 plt、print 等输出代码。
         else:
             previous_code = []
@@ -159,7 +114,7 @@ class Developer(Agent):
 
     def _run_code(self, state: State, no_code_flag: bool, path_to_run_code: str) -> str: # 执行代码
         # Delete previous images files
-        if 'eda' in state.restore_dir: # 如果当前阶段是EDA，有代码对应图片存在本地，要先删除所有已存储图片以及文件夹
+        if 'eda' in state.dir_name:
             images_dir = f'{state.restore_dir}/images/'
             for filename in os.listdir(images_dir):
                 image_path = os.path.join(images_dir, filename)
@@ -185,6 +140,23 @@ class Developer(Agent):
                 f.write("") # 清空输出文件。
             return True # error_flag
 
+        # Report syntax errors in the final assembled script before execution.
+        try:
+            with open(path_to_run_code, encoding='utf-8') as source:
+                script = source.read()
+                compile(script, path_to_run_code, 'exec')
+            if state.phase in ('PEDA Insight Extraction', 'IEDA Insight Extraction'):
+                with open(SACK_PACKAGE_DIR / 'Tools/eda_tools.py', encoding='utf-8') as tools:
+                    validate_eda_tool_keywords(script, tools.read())
+        except (SyntaxError, ToolCallError) as exc:
+            error_message = (f"Assembled code syntax error at line {exc.lineno}: {exc.msg}"
+                             if isinstance(exc, SyntaxError) else str(exc))
+            self.all_error_messages.append(error_message)
+            with open(path_to_error, 'w', encoding='utf-8') as output:
+                output.write(error_message)
+            with open(path_to_output, 'w', encoding='utf-8') as output:
+                output.write('')
+            return True
         result = {}
         # timeout  这不是永远都会执行吗？
         if 'Analysis' in state.phase: # EDA 阶段。
@@ -426,7 +398,11 @@ class Developer(Agent):
         if not relevant_code_snippets:
             relevant_code_snippets = "No relevant code snippets available for reference.\n"
 
-        while round <= max_tries: # 某阶段某轮次内部的 代码生成与调试的多次迭代
+        total_cycles = 0
+        while round <= max_tries and total_cycles < 2 * max_tries:
+            total_cycles += 1
+            # Count HELP/regeneration cycles as well as execution attempts.
+
             if round == 0 or retry_flag or no_code_flag: # 代码生成分支   第一次/要重新代码生成/没有代码都需要生成代码
                 if len(state.memory) == 1: # 第一轮没有经验
                     # round 0 竞赛背景 阶段任务要求  数据集信息  plan  任务（根据plan编码）
@@ -502,6 +478,11 @@ class Developer(Agent):
                 no_code_flag, _, path_to_run_code = self._generate_code_file(state, raw_reply) # 生成可执行代码
                 error_flag = self._run_code(state, no_code_flag, path_to_run_code) # 执行代码
             round += 1
+
+        # A final successful repair may have changed the outputs after the last test.
+        # Validate those outputs even when the repair budget has been exhausted.
+        if not error_flag and not no_code_flag:
+            not_pass_flag, not_pass_information = self._conduct_unit_test(state)
 
         # save history 某阶段的本轮结束了，开始存档
         with open(f'{state.restore_dir}/{self.role}_history.json', 'w',encoding='utf-8') as f:

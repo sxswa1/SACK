@@ -2,9 +2,10 @@ PROMPT_DEVELOPER_TASK_EDA = '''
 Develop an efficient solution based on the Planner's provided plan:
 1. Implement specific tasks ONLY by calling PREDEFINED EDA tools (NO custom implementation of statistical logic).
 2. Ensure each tool is called with CORRECT parameters (refer to tool descriptions).
-3. Return structured, machine-readable outputs (consistent with EDAInsight template fields).
+3. Print structured, machine-readable outputs to stdout, labeled with exact tool names (for example, print(json.dumps({"tool_name": result}))). The Summarizer only reads captured stdout; separate result files are not consumed. Printing must occur on successful calls, not only in exception handlers.
 4. Keep code minimal: only tool calls + data loading/saving + necessary data preprocessing.
-5. Avoid redundant calculations (each EDA tool is called once).
+5. Avoid redundant calculations (each EDA tool is called once). Cover all planned tools and required EDAInsight fields. Preserve applicability outputs returned by temporal/spatial tools without inventing columns or statistics.
+6. Do not catch tool errors and substitute fabricated constants. Expose failures so the framework can debug them. Encode a categorical treatment on a copy when a correlation tool requires numeric input; do not alter the source dataset.
 
 Remember: All statistical analysis (missing rate, outliers, correlation) MUST use predefined EDA tools.
 '''

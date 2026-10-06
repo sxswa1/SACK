@@ -91,9 +91,11 @@ def get_competition_edainsight(
         new_state = State(phase=start_phase, competition=competition_name, use_mode=use_mode)
 
         while True:
+            previous_state = new_state
             exec_state_info, new_state = sop.step(state=new_state)
             if exec_state_info == "Fail":
-                logging.error("%s failed at phase=%s score=%s", competition_name, new_state.phase, new_state.score)
+                failed_state = new_state or previous_state
+                logging.error("%s failed at phase=%s score=%s", competition_name, failed_state.phase, failed_state.score)
                 return "fail"
             if exec_state_info == "Complete":
                 logging.info("%s completed", competition_name)
