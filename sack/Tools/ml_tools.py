@@ -154,7 +154,20 @@ def detect_and_handle_outliers_iqr(data: pd.DataFrame, columns: Union[str, List[
         upper_bound = Q3 + factor * IQR
 
         if method == 'clip':
-            data[column] = data[column].clip(lower_bound, upper_bound)
+            # Nullable integer arrays cannot store fractional clipping bounds.
+            # Promote only when a fractional bound will replace an actual value.
+            values = data[column]
+            if pd.api.types.is_integer_dtype(values.dtype):
+                fractional_clip = (
+                    pd.notna(lower_bound) and not float(lower_bound).is_integer()
+                    and (values < lower_bound).fillna(False).any()
+                ) or (
+                    pd.notna(upper_bound) and not float(upper_bound).is_integer()
+                    and (values > upper_bound).fillna(False).any()
+                )
+                if fractional_clip:
+                    values = values.astype('Float64')
+            data[column] = values.clip(lower_bound, upper_bound)
         elif method == 'remove':
             data = data[(data[column] >= lower_bound) & (data[column] <= upper_bound)]
         else:
@@ -811,13 +824,16 @@ def create_polynomial_features(data: pd.DataFrame,
         include_bias (bool, optional): If True, include a bias column (all 1s). Defaults to False.
 
     Returns:
-        pd.DataFrame: DataFrame with original and new polynomial features.
+        pd.DataFrame: Original columns plus new polynomial features, with unique names.
 
     Raises:
-        ValueError: If specified columns are not numeric or if invalid parameters are provided.
+        ValueError: If inputs are invalid, input names are duplicated, or a new feature name already exists.
     """
     if isinstance(columns, str):
         columns = [columns]
+
+    if not data.columns.is_unique:
+        raise ValueError("Input DataFrame has duplicate column names; resolve them before creating polynomial features.")
 
     if degree < 1:
         raise ValueError("Degree must be at least 1.")
@@ -858,8 +874,11 @@ def create_polynomial_features(data: pd.DataFrame,
     feature_names = poly.get_feature_names_out(unique_columns)
     poly_df = pd.DataFrame(poly_features, columns=feature_names, index=data.index)
 
-    # Remove duplicate columns (original features)
-    poly_df = poly_df.loc[:, ~poly_df.columns.duplicated()]
+    # PolynomialFeatures includes degree-one inputs, which already exist in data.
+    poly_df = poly_df.loc[:, poly.powers_.sum(axis=1) != 1]
+    collisions = poly_df.columns.intersection(data.columns)
+    if len(collisions):
+        raise ValueError(f"Polynomial feature names already exist in the DataFrame: {list(collisions)}")
 
     result = pd.concat([data, poly_df], axis=1)
 

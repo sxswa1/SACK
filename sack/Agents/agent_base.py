@@ -17,6 +17,7 @@ logger.setLevel(logging.INFO)
 
 from sack.utils import read_file
 from sack.state import State
+from sack.runtime_support import ReplyFormatError, parse_json_object
 from sack.paths import SACK_CONFIG_PATH
 from sack.Prompts.prompt_base import *
 from typing import Tuple, List
@@ -119,32 +120,22 @@ class Agent:
 
 
                     elif file_ext == '.csv':
-                        # 先尝试UTF-8编码
-                        try:
-                            df_utf8 = pd.read_csv(file_path, nrows=num_lines, encoding='utf-8')
-                            df_utf8 =  df_utf8.dropna(how='all')
-                            # 检查是否含有常见乱码字符。
-                            if not df_utf8.applymap(lambda x: any(c in str(x) for c in ('�', '锟', '茂', '驴', '陆'))).any().any():
-                                tsv_data = df_utf8.to_csv(sep='\t', na_rep='nan', index=False)
-                            return tsv_data.split('\n')
-                        except (UnicodeDecodeError, pd.errors.ParserError):
-                            pass  # 如果读取失败，继续尝试 GBK 编码。
-                        # 再尝试GBK编码
-                        try:
-                            df_gbk = pd.read_csv(file_path, nrows=num_lines, encoding='gbk')
-                            df_gbk = df_gbk.dropna(how='all')
-                            tsv_data = df_gbk.to_csv(sep='\t', na_rep='nan', index=False)
-                            return tsv_data.split('\n')
-                        except (UnicodeDecodeError, pd.errors.ParserError):
-                            # 两种编码均失败时，使用错误替换策略。
+                        # Show source CSV bytes as text, rather than converting
+                        # delimiters and dropping row boundaries in a TSV view.
+                        with open(file_path, 'rb') as source:
+                            detected = chardet.detect(source.read(65536)).get('encoding')
+                        encodings = list(dict.fromkeys(
+                            encoding for encoding in ('utf-8-sig', detected, 'gb18030') if encoding))
+                        for encoding in encodings:
                             try:
-                                df = pd.read_csv(file_path, nrows=num_lines, encoding='utf-8', errors='replace')
-                                df = df.dropna(how='all')
-                                tsv_data = df.to_csv(sep='\t', na_rep='nan', index=False)
-                                return tsv_data.split('\n')
-                            except Exception as e:
-                                return [f"错误：无法读取文件 - {str(e)}"]
-
+                                with open(file_path, encoding=encoding) as source:
+                                    lines = [line for _, line in zip(range(num_lines), source)]
+                                return [f"[Raw CSV source preview; delimiters, quoting and row boundaries preserved. Encoding: {encoding}]\n", *lines]
+                            except (UnicodeDecodeError, LookupError):
+                                continue
+                        with open(file_path, encoding='utf-8', errors='replace') as source:
+                            lines = [line for _, line in zip(range(num_lines), source)]
+                        return ["[Raw CSV source preview; invalid bytes replaced.]\n", *lines]
 
                     elif file_ext in ['.parquet', '.parq']:
                         # 3) 最后兜底：utf-8 + replace，至少保证不报错
@@ -230,56 +221,26 @@ class Agent:
         return data_preview
 
     def _parse_json(self, raw_reply: str) -> Dict[str, Any]:  # 把大模型返回的json text 提取成json
-        def try_json_loads(data: str) -> Dict[str, Any]:
-            try:
-                return json.loads(data)
-            except json.JSONDecodeError as e:
-                logging.error(f"JSON decoding error: {e}")
-                return None
-
-        raw_reply = raw_reply.strip()
-        logger.info(f"Attempting to extract JSON from raw reply.")
-        json_match = re.search(r'```json(.*)```', raw_reply, re.DOTALL)  # greedy mode capture
-
-        if json_match:
-            reply_str = json_match.group(1).strip()
-            reply = try_json_loads(reply_str)
-            if reply is not None:
-                return reply
-
-        # 如果提取失败，针对不同场景让模型重组 JSON 格式。
-        logger.info(f"Failed to parse JSON from raw reply, attempting reorganization.")
-        if self.role == 'developer':
-            # 确保内容是字符串
-            json_reply, _ = self.llm.generate(PROMPT_REORGANIZE_EXTRACT_TOOLS.format(information=raw_reply), history=[],
-                                              max_completion_tokens=4096)
-        else:
-            # 其他情况的json都只需要要求充足成json格式即可，没有具体字段格式定义
-            json_reply, _ = self.llm.generate(PROMPT_REORGANIZE_JSON.format(information=raw_reply), history=[],
-                                              max_completion_tokens=4096)
-
-        json_match = re.search(r'```json(.*?)```', json_reply, re.DOTALL)  # 重新提取json
-        if json_match:
-            reply_str = json_match.group(1).strip()
-            reply = try_json_loads(reply_str)
-
-            if reply is not None:
-                return reply
-
-        logging.error("Final attempt to parse JSON failed.")
-        reply = {}
-
-        return reply
-
+        self._last_json_parse = {"original": raw_reply}
+        try:
+            parsed = parse_json_object(raw_reply)
+        except ReplyFormatError:
+            logger.info("Reply needs JSON object repair.")
+            prompt = (PROMPT_REORGANIZE_EXTRACT_TOOLS if self.role == 'developer'
+                      else PROMPT_REORGANIZE_JSON)
+            repaired, _ = self.llm.generate(prompt.format(information=raw_reply), history=[],
+                                            max_completion_tokens=4096)
+            self._last_json_parse["repaired"] = repaired
+            parsed = parse_json_object(repaired)
+        self._last_json_parse["parsed"] = parsed
+        return parsed
     def _parse_markdown(self, raw_reply: str) -> str:
-        markdown_match = re.search(r'```markdown(.*)```', raw_reply, re.DOTALL)
+        markdown_match = re.search(r'```(?:markdown|md)\s*\n(.*?)```', raw_reply, re.DOTALL | re.IGNORECASE)
         if markdown_match:
             reply_str = markdown_match.group(1).strip()
             return reply_str
         else:
-            print(self.role)
-            logging.error("Failed to parse markdown from raw reply.")  # 无法解析markdown格式
-            # pdb.set_trace()
+            logger.debug("Using plain Markdown reply without a code fence.")
             return raw_reply
 
     def _json_to_markdown(self, json_data):  # json格式转markdown

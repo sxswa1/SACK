@@ -102,7 +102,7 @@ class SOP:
         elif state.score >= 3:
             return "Complete", None  # 最后一个阶段结束了
         else:
-            return "Fail", None
+            return "Fail", state
 
     def _update_other_state(self, state: State) -> Tuple[str, Optional[State]]:  # 其他阶段的迁移判断
         if state.phase == "Feature Engineering":
@@ -120,7 +120,7 @@ class SOP:
                 next_phase = self.get_next_phase(state.phase)
                 return "Success", State(phase=next_phase, competition=self.competition, use_mode=self.config['use_mode'])
         else:
-            return "Fail", None
+            return "Fail", state
 
     def _create_repeat_state(self, state: State) -> State:  # 重复当前阶段，阶段还是这个阶段但state已经是新一轮的state了
         new_state = State(phase=state.phase, competition=self.competition, use_mode=self.config['use_mode'])

@@ -1,8 +1,10 @@
 # Titanic 两后端测试失败的代码诊断
 
+后续修复已在第十二版完成两后端顺序完整验证，221 项本地回归通过；详见[最终验证摘要](sack-titanic-fix12-final-validation-20261005.md)。本文保留初始失败诊断的代码和证据快照，不代表修复后当前行为。
+
 诊断日期：2026-10-02（北京时间）。依据：已保存的最终对照报告与 JSON、上一轮已读取的 GraphDB 详细运行日志和 Reviewer 文件、原监控聊天保存的 TuGraph 命令输出、当前代码及无模型调用的离线复现。
 
-本次只做诊断和报告；未修改业务代码、未重新运行 Titanic 或付费模型请求。补读服务器日志时，SSH 在密钥交换之前被远端关闭，因此 profile 数值列的具体异常堆栈未取得；不能把它写成已经确认的某个依赖或模型错误。
+初次诊断只读取代码和日志，未修改业务代码或重新运行 Titanic。初次补读时 SSH 在密钥交换前被关闭。2026-10-02 SSH 恢复后补读原 TuGraph 日志，已确认数值列导入失败为 `ModuleNotFoundError: No module named 'bitstring'`；后续修复和重测状态另见验证记录。
 
 ## 结论与证据等级
 
@@ -13,7 +15,7 @@
 | 纯 JSON 被忽略，重新调用模型格式化后评分缺失，被默认置 0 | GraphDB 原始回复、review.json、日志和上一轮离线复现确认 | 实际代码执行和单元检查成功，阶段仍被判失败 |
 | JSON 返回列表却按字典使用 | GraphDB 第三轮异常堆栈确认 | Reviewer 直接抛 TypeError |
 | Fail 状态返回 None，失败日志继续访问其 phase/score | 两边日志与代码确认 | 产生二次异常，遮蔽原阶段失败 |
-| 数值列处理异常后跳过，profile 不校验列覆盖 | 输出与代码确认；底层数值异常未确认 | 不完整 profile 仍被保存并用于检索 |
+| 数值列处理异常后跳过，profile 不校验列覆盖 | 旧日志确认缺少 bitstring，数值 profile 模块导入失败 | 不完整 profile 仍被保存并用于检索 |
 | profile 扫描整个目录、当前 profile 数据源指向独立 EDA 工作区 | 启动准备脚本、日志路径、五表 profile 输出确认 | 将标准化表、清洗表和提交模板混入同一个画像，且数据可能早于最终 DSP 输出 |
 | 多层重试与额外模型格式化请求耗时 | 代码与阶段时间确认；未计算各环节精确占比 | TuGraph 达到整个服务四小时上限后终止 |
 
@@ -90,7 +92,7 @@ Markdown 解析日志需要单独理解：`_parse_markdown()` 没找到围栏时
 
 监控保存的 profile 只保留 21 列，主要为字符串类和二值 Survived；Age、Fare、Pclass、SibSp、Parch、id 被跳过。代码中二值整数会走 BooleanProfileCreator，其余整数/浮点走需要加载 PyTorch 模型的 Int/FloatProfileCreator，再计算统计和数值嵌入。因此现象指向共享的数值处理分支，不能把它当作 TuGraph 查询丢列。
 
-尚未取得实际异常堆栈，不能在模型文件路径/加载、统计标量转换、数值预处理等可能位置中指定一个已确认根因。源 CSV 可正常读取也不等于数值嵌入生成成功。
+SSH 恢复后，旧日志明确记录 Age、Fare、Parch、Pclass、SibSp、id 的工厂方法在导入 Int/FloatProfileCreator 时，经 NumericalProfileCreator 的 `import bitstring` 抛出 `ModuleNotFoundError: No module named 'bitstring'`。因此这些列是在本地模块导入阶段失败，尚未执行数值模型加载或嵌入，也不是 TuGraph 查询丢列。旧 utils 捕获并跳过异常，使依赖缺失进一步变成“生成成功但列不完整”。
 
 另一个已确认问题：`_list_competition_csv_files()` 优先返回目录根层全部 CSV，不区分 train/test、cleaned_* 和 sample_submission。真实五张表均进入 profile。
 

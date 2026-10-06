@@ -135,6 +135,7 @@ class SACKCaseRetriever():
                 current_comp_profile = self.sack_knowledge.generate_competition_profile(
                     comp_id=competition,
                     persist_path=current_comp_path,
+                    source_path=current_comp_path,
                 )
     
     

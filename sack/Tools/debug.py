@@ -77,6 +77,12 @@ class DebugTool: # 调试工具
 
         # extract code 从回答中提取代码段
         correct_code_matches = re.findall(pattern, fix_reply, re.DOTALL)
+        correct_code_matches = [code for code in correct_code_matches if code.strip()]
+        if not correct_code_matches:
+            logger.warning("Debug reply contains no corrected Python code; request regeneration.")
+            with open(f'{state.restore_dir}/single_round_debug_history.json', 'w', encoding='utf-8') as f:
+                json.dump(single_round_debug_history, f, ensure_ascii=False, indent=4)
+            return "HELP", single_round_debug_history
         code_snippet_after_correction = correct_code_matches[-1]
 
         # 合并代码：用修正后的代码块替换原代码中出错的位置。

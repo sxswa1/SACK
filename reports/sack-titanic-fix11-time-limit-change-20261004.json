@@ -1,0 +1,23 @@
+{
+  "requested_limit_seconds": 21600,
+  "reason": "User requested a more generous time limit; current progressing run retained without restart.",
+  "changed_at": "2026-10-04T01:31:55.862462+00:00",
+  "method": "runtime drop-in and daemon-reload (set-property unsupported by systemd249)",
+  "before": {
+    "RuntimeMaxUSec": "4h",
+    "MainPID": "931937",
+    "ExecMainStartTimestamp": "Sun 2026-10-04 09:19:09 CST",
+    "ActiveState": "active",
+    "DropInPaths": ""
+  },
+  "after": {
+    "RuntimeMaxUSec": "6h",
+    "MainPID": "931937",
+    "ExecMainStartTimestamp": "Sun 2026-10-04 09:19:09 CST",
+    "ActiveState": "active",
+    "DropInPaths": "/run/systemd/system/sack-titanic-fix11-graphdb-20261004.service.d/60-titanic-runtime-limit.conf"
+  },
+  "same_pid_and_start_timestamp": true,
+  "future_tugraph_limit_seconds": 21600,
+  "workflow_source_changed": false
+}

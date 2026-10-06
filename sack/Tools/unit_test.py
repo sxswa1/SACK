@@ -4,6 +4,7 @@ import json
 import chromadb
 import re
 import logging
+import math
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -33,7 +34,11 @@ class TestTool:  # 所有单元测试函数都定义在这里。
         for func_name in test_function_names:
             if hasattr(self, func_name): # 如果存在 self.func_name 对应的函数。
                 func = getattr(self, func_name)
-                result = func(state) # return execution result, test number, test information
+                try:
+                    result = func(state) # return execution result, test number, test information
+                except Exception as exc:
+                    logger.exception("Test '%s' could not validate the generated output", func_name)
+                    result = False, 0, f"{func_name}: {type(exc).__name__}: {exc}. Repair the generated output and rerun this test."
                 if not result[0]: # if the test failed
                     not_pass_tests.append(result)
                     logger.info(f"Test '{func_name}' failed: {result[2]}")
@@ -248,6 +253,10 @@ class TestTool:  # 所有单元测试函数都定义在这里。
         df = pd.read_csv(path)
         path_to_origin_train = f"{state.competition_dir}/cleaned_train.csv"
         df_origin = pd.read_csv(path_to_origin_train)
+        sample = pd.read_csv(f"{state.competition_dir}/sample_submission.csv", nrows=0)
+        predictors = set(df.columns) - set(sample.columns)
+        if not predictors:
+            return False, 15, "No predictor columns remain after feature selection. Preserve at least one real predictor, excluding IDs and targets. Feature selection tools return feature names in the 'feature' column; their output column names are not the selected predictors."
         result = "Valid"
         if (len(df.columns) <= 3 * len(df_origin.columns) or len(df.columns) <= 50) and result == "Valid":  # 不能引入太多新特征
             return True, 15, f"The feature engineering phase is well performed."
@@ -280,6 +289,10 @@ Here is the information about the features of processed_train.csv:
         df = pd.read_csv(path)
         path_to_origin_train = f"{state.competition_dir}/cleaned_test.csv"
         df_origin = pd.read_csv(path_to_origin_train)
+        sample = pd.read_csv(f"{state.competition_dir}/sample_submission.csv", nrows=0)
+        predictors = set(df.columns) - set(sample.columns)
+        if not predictors:
+            return False, 16, "No predictor columns remain after feature selection. Preserve at least one real predictor, excluding IDs and targets. Feature selection tools return feature names in the 'feature' column; their output column names are not the selected predictors."
         result = "Valid"
         if (len(df.columns) <= 3 * len(df_origin.columns) or len(df.columns) <= 50) and result == "Valid":
             return True, 16, f"The feature engineering phase is well performed."
@@ -529,82 +542,40 @@ Here is the information about the features of processed_test.csv:
 
     
     def test_submission_validity(self, state: State):
-        # 检查 submission.csv 与 sample_submission.csv 的列是否相同。
-        # 检查 submission.csv 的数值是否在预期范围内。
-        # 要保证有submission.csv生成
-        path_sample = f"{state.competition_dir}/sample_submission.csv"
-        path_submission = f"{state.competition_dir}/submission.csv"
-        
-        df_sample = pd.read_csv(path_sample)
-        df_submission = pd.read_csv(path_submission)
-        
-        # Replace the first column of submission.csv with the first column from sample_submission.csv
-        first_column_name = df_sample.columns[0]
-        df_submission[first_column_name] = df_sample[first_column_name]
-        
-        # Save the modified submission.csv
-        df_submission.to_csv(path_submission, index=False)
+        """Validate the generated file without changing IDs or model predictions."""
+        sample = pd.read_csv(f"{state.competition_dir}/sample_submission.csv")
+        submission = pd.read_csv(f"{state.competition_dir}/submission.csv")
+        def failed(reason):
+            return False, 29, f"submission.csv is not valid: {reason}. Save the actual model predictions to {state.competition_dir}/submission.csv; do not alter predictions to match the sample distribution."
+        if len(sample.columns) < 2 or list(submission.columns) != list(sample.columns):
+            return failed("columns must exactly match sample_submission.csv")
+        if len(submission) != len(sample):
+            return failed("row count must match sample_submission.csv")
+        if submission.isna().any().any():
+            return failed("missing values are not allowed")
+        id_column = sample.columns[0]
+        if submission[id_column].tolist() != sample[id_column].tolist():
+            return failed("IDs and their order must match sample_submission.csv")
+        train_path = f"{state.competition_dir}/train.csv"
+        train = pd.read_csv(train_path) if os.path.isfile(train_path) else pd.DataFrame()
+        for target in sample.columns[1:]:
+            predicted = submission[target]
+            if pd.api.types.is_numeric_dtype(sample[target]):
+                values = pd.to_numeric(predicted, errors='coerce')
+                if not values.map(lambda value: pd.notna(value) and math.isfinite(value)).all():
+                    return failed(f"{target} must contain finite numeric values")
+                labels = set(train[target].dropna().unique()) if target in train else set()
+                if labels == {0, 1}:
+                    if set(sample[target].dropna().unique()).issubset(labels):
+                        if not values.isin(labels).all():
+                            return failed(f"{target} must contain binary class labels 0 or 1")
+                    elif not values.between(0, 1).all():
+                        return failed(f"{target} probabilities must be between 0 and 1")
+            elif target in train:
+                if not predicted.isin(train[target].dropna().unique()).all():
+                    return failed(f"{target} contains labels absent from training data")
+        return True, 29, "submission.csv has valid schema, IDs and prediction values."
 
-        unique_values = df_submission.iloc[:, 1].unique()
-        if set(unique_values) == {0, 1} or set(unique_values) == {False, True} or set(unique_values) == {0.0, 1.0}:  # 离散标签。
-            result = "Valid"
-            return True, 29, "submission.csv is valid."
-
-        # If the data type of the second column is numeric
-        if pd.api.types.is_numeric_dtype(df_sample.iloc[:, 1]) and not pd.api.types.is_bool_dtype(df_submission.iloc[:, 1]): # 数值结果
-            # Calculate mean of first 100 values in the second column
-            # Check if submission mean is within the range of 1/10 to 10 times the sample mean
-            sample_mean = df_sample.iloc[:100, 1].mean()
-            submission_mean = df_submission.iloc[:100, 1].mean()
-            lower_bound = sample_mean / 10
-            upper_bound = sample_mean * 10
-            if lower_bound <= submission_mean <= upper_bound:
-                result = "Valid"
-                reason = "The mean of the first 100 values in the submission file is within the expected range."
-            else:
-                result = "Invalid"
-                reason = f"The mean of the first 100 values in the submission file ({submission_mean}) is outside the expected range ({lower_bound} to {upper_bound}). "
-                reason += "\nA common issue is mismatched predicted values and expected labels: e.g., discrete class labels (e.g., 0/1) are paired with probability predictions (0-1 range), which violates the label range requirement. "
-                reason += "\nAn effective fix is to map prediction probabilities directly to the target label range."
-        elif pd.api.types.is_numeric_dtype(df_sample.iloc[:, 1]) != pd.api.types.is_numeric_dtype(df_submission.iloc[:, 1]):
-            result = "Invalid"
-            sample_dtype = df_sample.iloc[:, 1].dtype
-            submission_dtype = df_submission.iloc[:, 1].dtype
-            sample_values = df_sample.iloc[:10, 1].tolist()
-            submission_values = df_submission.iloc[:10, 1].tolist()
-            reason = f"The data types of the second column in sample_submission.csv ({sample_dtype}) and submission.csv ({submission_dtype}) do not match."
-            reason += f"\n\nFirst 10 values in sample_submission.csv ({sample_dtype}):\n{sample_values}"
-            reason += f"\n\nFirst 10 values in submission.csv ({submission_dtype}):\n{submission_values}"
-        else: 
-            result = "Valid"
-        # compare the first column values of two DataFrames
-        if result == "Valid":
-            return True, 29, "submission.csv is valid."
-        else:
-            false_info = f"submission.csv is not valid. {reason}"
-            false_info += f'''
-This is the first 10 lines of sample_submission.csv:
-{df_sample.head(10)}
-This is the first 10 lines of submission.csv:
-{df_submission.head(10)}
-For Id-type column, submission.csv should have exactly the same values as sample_submission.csv. I suggest you load Id-type column directly from `{state.competition_dir}/test.csv`.
-A special case: if you use some transformation on the features in submission.csv, please make sure you have reversed the transformation before submitting the file.
-Here is an example that specific transformation applied on features (ID, SalePrice) in submisson.csv is **not reversed**, which is wrong:
-<example>
-- submission.csv:
-Id,SalePrice
-1.733237550296372,-0.7385090666351347
-1.7356102231920547,-0.2723912737214865
-...
-- sample_submission.csv:
-Id,SalePrice
-1461,169277.0524984
-1462,187758.393988768
-</example>
-'''
-            return False, 29, false_info
-    
-    
     def test_file_size(self, state: State):
         max_size_mb = 100
         path = f"{state.competition_dir}/train.csv"

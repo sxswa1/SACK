@@ -1,0 +1,53 @@
+{
+  "compared_source_files_each": 266,
+  "source_directory_hashes_equal": true,
+  "source_directory_differences": [],
+  "immutable_source_manifest_files_each": 262,
+  "manifest_mismatches": {
+    "graphdb": [],
+    "tugraph": []
+  },
+  "model_config_sha256": "5676b0d3cdab8e5f54ca2b038f3c69523c3175b25f3bd953680095e4418a158d",
+  "raw_input_hashes_equal": true,
+  "raw_input_manifests": {
+    "graphdb": {
+      "competitions": {
+        "train.csv": "4a437fde05fe5264e1701a7387ac6fb75393772ba38bb2c9c566405af5af4bd7",
+        "test.csv": "5c78320a80dc159b35c408363be46a5d93f078183d539db75ee42a796d6a4e95",
+        "overview.txt": "0bebd0c2c312335524fda9d2c73158604f89b83b536856e79dbb458c8bd24ace",
+        "sample_submission.csv": "af6609cdf1dad0b699bd3414c13e999b2c2f651972f0938254a835985d584306"
+      },
+      "eda_competitions": {
+        "train.csv": "4a437fde05fe5264e1701a7387ac6fb75393772ba38bb2c9c566405af5af4bd7",
+        "test.csv": "5c78320a80dc159b35c408363be46a5d93f078183d539db75ee42a796d6a4e95",
+        "overview.txt": "0bebd0c2c312335524fda9d2c73158604f89b83b536856e79dbb458c8bd24ace",
+        "sample_submission.csv": "af6609cdf1dad0b699bd3414c13e999b2c2f651972f0938254a835985d584306"
+      }
+    },
+    "tugraph": {
+      "competitions": {
+        "train.csv": "4a437fde05fe5264e1701a7387ac6fb75393772ba38bb2c9c566405af5af4bd7",
+        "test.csv": "5c78320a80dc159b35c408363be46a5d93f078183d539db75ee42a796d6a4e95",
+        "overview.txt": "0bebd0c2c312335524fda9d2c73158604f89b83b536856e79dbb458c8bd24ace",
+        "sample_submission.csv": "af6609cdf1dad0b699bd3414c13e999b2c2f651972f0938254a835985d584306"
+      },
+      "eda_competitions": {
+        "train.csv": "4a437fde05fe5264e1701a7387ac6fb75393772ba38bb2c9c566405af5af4bd7",
+        "test.csv": "5c78320a80dc159b35c408363be46a5d93f078183d539db75ee42a796d6a4e95",
+        "overview.txt": "0bebd0c2c312335524fda9d2c73158604f89b83b536856e79dbb458c8bd24ace",
+        "sample_submission.csv": "af6609cdf1dad0b699bd3414c13e999b2c2f651972f0938254a835985d584306"
+      }
+    }
+  },
+  "shared_launch_script_sha256": "e7228c61b7a0cd40d26315d3d1065c6090c23f3cd977f6238bb0bf2b94ce91d6",
+  "backend_selection": "SACK_AGENT_GRAPH_BACKEND=$TASK_BACKEND",
+  "shared_model_and_thread_configuration": true,
+  "runtime_isolation": "Per-backend workspace, cache, status, logs and generated artifacts; same source, models, inputs and launch script.",
+  "excluded_runtime_source_files": [
+    "competition_process_status.json",
+    "__pycache__/*.pyc",
+    "*.log",
+    "long_message_*"
+  ],
+  "source_manifest_sha256": "c79efd84db2061d7ffcf312837e562c2f5345bee651c0b2f83a86cc4c8a54d96"
+}
