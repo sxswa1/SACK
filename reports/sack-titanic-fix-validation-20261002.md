@@ -4,7 +4,7 @@
 
 GraphDB 与 TuGraph 已用相同业务源码、模型配置和原始输入顺序完成完整测试，真实严格验收均 accepted=true/errors=[]。GraphDB 于 10-04 23:04:33、TuGraph 于 10-05 01:37:21 北京时间非主动退出 0。本地最终回归 221 passed；两后端 262 个不可变清单源码与本地一致，完整目录 266 个非运行产物文件两边一致。
 
-两边完整 DSP、独立 EDA、两类完整洞察、train12/test11 全列 300 维有限 profile、有效处理数据和 418 行二分类预测均通过，原始数据哈希未变。processed 数据为 train891/test418 行，GraphDB 各38/TuGraph 各12 个匹配真实预测特征。标准化 id/Survived 与 Kaggle 原始 PassengerId/Survived 不同，未提交 Kaggle；不能据此宣称后端全面等价。
+两边完整 DSP、独立 EDA、两类完整洞察、train12/test11 全列 300 维有限 profile、有效处理数据和 418 行二分类预测均通过，原始数据哈希未变。processed 数据为 train891/test418 行，GraphDB 各38/TuGraph 各12 个匹配真实预测特征。标准化 id/Survived 与 Kaggle 原始 PassengerId/Survived 不同，完整验收当时尚未提交 Kaggle（后续授权提交见末节）；不能据此宣称后端全面等价。
 
 最终摘要和精简证据：[最终验证](sack-titanic-fix12-final-validation-20261005.md)、[最终 JSON](sack-titanic-fix12-final-evidence-20261005.json)。以下为按时间保留的历史过程，早期测试数量、四小时上限、旧版通过和“未提交”状态均属于当时记录；以本节及最终证据为准。
 
@@ -261,3 +261,9 @@ Fix12 GraphDB check2026-10-04 22:44 Beijing: Feature Engineering outputs indepen
 Fix12 GraphDB final acceptance: nonintentional exit0 at2026-10-04T15:04:33.741031+00:00 (23:04:33 Beijing), runtime2h34m49s. Actual accept.py accepted=true/errors=[]: completeDSP, independentEDA success and both insights complete/unknown0/no nonfinite values, all profile train12/test11 columns with finite300-dimensional vectors, cleaned/processed data and38 matching real predictors with891/418 rows, valid418binary predictions matching original testIDs, original raw hashes unchanged. Standardized submission id/Survived differs from originalKaggle PassengerId/Survived; original_submission_schema_matches=false, noKaggle submission. Saved sack-titanic-fix12-graphdb-acceptance-20261004.json.
 
 Rechecked262 immutable sources in both server copies and local final workspace: no mismatches. After GraphDB finished/accepted and TuGraph never-started guard, sequentially started TuGraph once at2026-10-04T15:05:27.178749+00:00 (23:05:27 Beijing), driverPID1016570/MainPID1016572, serviceactive, RuntimeMaxUSec=6h, upper bound2026-10-05 05:05:27 Beijing. Current independentEDA Data Preparation; fullTuGraph acceptance pending. No code changes, commit orpush.
+
+## 后续 Kaggle 提交与项目交接（2026-10-06）
+
+用户在完整验收交付之后另行授权 Kaggle 提交。提交副本仅把 id/Survived 改为 PassengerId/Survived，418 行预测负载保持不变；两份均显示 Success/Complete，GraphDB public score=0.72488、TuGraph=0.78468。详见 [后续提交记录](sack-titanic-kaggle-submissions-20261006.json)。该结果不能证明数据库固定带来精度提升。
+
+详细原理、代码调用链、GraphDB→TuGraph 实现范围、部署、排障和接手清单见 [项目交接手册](../docs/project-handoff.md)。本轮仅补充文档及证据，不修改已经完成双后端验收的业务源码，不执行新的模型实验或数据库变更。

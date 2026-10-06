@@ -2,6 +2,10 @@
 
 This repository contains the SACK artifact source code for the accompanying paper. It is a source-only release: benchmark data, generated knowledge artifacts, runtime databases, logs, API keys, and local experiment outputs are intentionally excluded.
 
+## Project handoff
+
+Start with the [Chinese project handoff guide](docs/project-handoff.md) for the original SACK design, code walkthroughs, GraphDB-to-TuGraph implementation boundaries, deployment, troubleshooting, and validated Titanic results. The guide distinguishes the migration baseline from this PR's shared workflow fixes and includes the later Kaggle scores.
+
 ## Contents
 
 - `sack/`: SACK agents, prompts, tools, runtime state, command-line entry points, and core execution flow.
