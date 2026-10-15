@@ -1,0 +1,4 @@
+# Keep local runtime credentials out of Docker build contexts and images.
+.env
+.env.*
+!.env.example

@@ -33,6 +33,22 @@ The full knowledge-building and live case-retrieval path additionally requires:
 
 ## Basic Commands
 
+SACK automatically loads `.env` from the repository root when the package is
+imported, including CLI and direct Python API use. Existing process environment
+variables take precedence. Create your local configuration once:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` to set the TuGraph connection, graph name and existing account
+password. The template selects `tugraph`; without backend configuration, the
+default remains `graphdb`. `.env` is ignored by Git. No manual `source` or
+`export` is needed. The file is located relative to the installed source, not
+the current working directory, and changes take effect in a new process.
+PostgreSQL/pgvector and model assets are still needed for case retrieval;
+model API credentials continue to use `sack/api_key.txt`.
+
 Run a SACK task:
 
 ```bash

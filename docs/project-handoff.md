@@ -626,6 +626,10 @@ EDA deployment README 的离线检查只证明 EDA 运行时，明确不包含�
 
 ### 9.2 配置入口及优先级
 
+项目现在会在导入 `sack` 时自动读取源码仓库根目录的 `.env`，CLI 与直接调用 Python API 均生效；已有进程环境变量优先，不依赖当前工作目录。首次使用可执行 `cp .env.example .env`，按 [配置模板](../.env.example) 填入 TuGraph 连接及部署所需的 PostgreSQL 配置，无需手动 `source`。真实 `.env` 已加入 Git 和 Docker 忽略规则，模型 API 仍使用 `sack/api_key.txt`。
+
+2026-10-15 的服务器同步建立了独立运行目录 `/opt/sack-tugraph-runtime-20261015/`，复用已验收业务源码、模型及数据库，未启动新的付费案例；自动加载、16 项相关回归与只读连接检查通过。配置位置、入口和验证范围见 [同步记录](../reports/sack-tugraph-env-deployment-20261015.md)。
+
 | 项目 | 实际入口 | 接手要点 |
 | --- | --- | --- |
 | 阶段、工具、测试名 | `sack/config.json` / `SACK_CONFIG_PATH` | SOP/State 按固定路径读取；framework 的 config_path 参数不是完整配置切换接口 |
