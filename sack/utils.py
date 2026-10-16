@@ -4,6 +4,8 @@ import base64
 import json
 import os
 
+from sack.model_config import get_model
+
 def load_config(file_path: str):
     assert file_path.endswith('json'), "The configuration file should be in JSON format."
     with open(file_path, 'r', encoding='utf-8') as f:
@@ -74,7 +76,7 @@ def multi_chat(api_handler: APIHandler, prompt, history=None, max_completion_tok
     return reply, history
 
 
-def read_image(prompt, image_path):
+def read_image(prompt, image_path, model: str | None = None):
     """
     Read the image and return the response.
     """
@@ -88,7 +90,7 @@ def read_image(prompt, image_path):
     base64_image = encode_image(image_path)
     from sack.api_handler import APIHandler, APISettings
 
-    api_handler = APIHandler('qwen3-vl-flash')
+    api_handler = APIHandler(model if model is not None else get_model("vision"), endpoint_role="vision")
     messages = [
         {"role": "system", "content": "You are a professional data analyst."},
         {

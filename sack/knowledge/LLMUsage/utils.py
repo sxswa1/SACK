@@ -4,7 +4,7 @@ import json
 import logging
 from typing import Dict, Any, List
 from sack.api_handler import APIHandler, APISettings
-from sack.utils import multi_chat as sack_multi_chat
+from sack.utils import multi_chat as sack_multi_chat, read_image as sack_read_image
 
 def load_config(file_path: str):
     assert file_path.endswith('json'), "The configuration file should be in JSON format."
@@ -32,32 +32,8 @@ def multi_chat(api_handler: APIHandler, prompt, history=None, max_completion_tok
     return sack_multi_chat(api_handler, prompt, history, max_completion_tokens)
 
 
-def read_image(prompt, image_path):
-    """
-    Read the image and return the response.
-    """
-
-    # encode the image
-    def encode_image(image_path):
-        with open(image_path, "rb") as image_file:
-            return base64.b64encode(image_file.read()).decode('utf-8')
-
-    # Getting the base64 string
-    base64_image = encode_image(image_path)
-    api_handler = APIHandler('Qwen2.5-vl-7b-instruct-awq')
-    messages = [
-        {"role": "system", "content": "You are a professional data analyst."},
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": f"{prompt}"},
-                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
-            ]
-        }
-    ]
-    settings = APISettings(max_completion_tokens=4096)
-    reply = api_handler.get_output(messages=messages, settings=settings, response_type='image')
-    return reply
+def read_image(prompt, image_path, model: str | None = None):
+    return sack_read_image(prompt, image_path, model=model)
 
 
 def parse_json_from_response(raw_reply: str) -> Dict[str, Any]:

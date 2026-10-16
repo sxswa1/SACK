@@ -16,6 +16,7 @@ from sack.Agents.agent_base import Agent
 from sack.utils import read_file
 from sack.state import State
 from sack.runtime_support import extract_stage_body, strip_stage_output, validate_eda_tool_keywords, ToolCallError
+from sack.model_config import get_model
 from sack.paths import SACK_PACKAGE_DIR
 from sack.Prompts.prompt_base import *
 from sack.Prompts.prompt_developer import *
@@ -239,7 +240,7 @@ class Developer(Agent):
     def _conduct_unit_test(self, state: State) -> None:  #执行单元测试
         from sack.Tools.unit_test import TestTool
 
-        test_tool = TestTool(tools_kb=None, model=self.model, type='api')
+        test_tool = TestTool(tools_kb=None, model=get_model("test"), type="api")
         not_pass_flag = False
         not_pass_tests = test_tool.execute_tests(state) # [(test1_number, test1_information), ...] if all pass return []
         logger.info(f"There are {len(not_pass_tests)} not pass tests.")
@@ -297,7 +298,7 @@ class Developer(Agent):
             output_messages = ""
 
         logger.info("Start debugging the code.")
-        debug_tool = DebugTool(model='qwen3-coder-plus', type='api')
+        debug_tool = DebugTool(model=get_model("debug"), type="api")
         if error_flag: # 带着执行错误去debug
             tools, tool_names = self._get_tools(state)
             reply, single_round_debug_history = debug_tool.debug_code_with_error(state, copy.deepcopy(self.all_error_messages), output_messages, previous_code, wrong_code, error_messages, tools, tool_names)

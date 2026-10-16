@@ -68,7 +68,7 @@ class Summarizer(Agent): # 阶段性总结工作 为下一个阶段提供见解
                     if len(chosen_images) == num_of_chosen_images:
                         break
         # 图转文模型调用，对这几个可视化图提供文本见解
-        image_to_text_tool = ImageToTextTool(model='qwen3-vl-flash', type='api')
+        image_to_text_tool = ImageToTextTool(type='api')
         images_to_descriptions = image_to_text_tool.image_to_text(state, chosen_images)
         insight_from_visualization = ""
         for image, description in images_to_descriptions.items():

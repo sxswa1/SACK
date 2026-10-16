@@ -11,6 +11,7 @@ logger.setLevel(logging.INFO)
 # from memory import Memory, transfer_text_to_json
 from sack.LLMComponent.knowledge_base import KnowledgeBase
 from sack.LLMComponent.llm import OpenaiEmbeddings, LLM
+from sack.model_config import get_model
 from sack.state import State
 from sack.utils import load_config
 from sack.Prompts.prompt_unit_test import *
@@ -19,10 +20,10 @@ class TestTool:  # 所有单元测试函数都定义在这里。
     def __init__(
         self, 
         tools_kb: KnowledgeBase = None,
-        model: str = 'Qwen2.5-coder-32b-instruct-gptq-int8',
+        model: str | None = None,
         type: str = 'api'
     ):
-        self.llm = LLM(model, type)
+        self.llm = LLM(model if model is not None else get_model("test"), type, endpoint_role="coder")
         self.kb = tools_kb
         # self.summary_ducument = summary_ducument
         pd.set_option('display.max_columns', None)
@@ -926,6 +927,6 @@ Here is the information about the features of processed_test.csv:
 
 
 if __name__ == '__main__':
-    test_tool = TestTool(memory=None, model='Qwen2.5-coder-32b-instruct-gptq-int8', type='api')
+    test_tool = TestTool(memory=None, model=get_model("test"), type='api')
     test_tool._execute_tests()
 

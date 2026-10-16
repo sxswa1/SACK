@@ -6,6 +6,7 @@ import os
 from typing import Dict, List, Any
 from sack.Prompts.prompt_graphrag import *
 from sack.state import State
+from sack.model_config import get_model
 from sack.Agents.agent_base import Agent
 
 logger = logging.getLogger(__name__)
@@ -266,7 +267,7 @@ if __name__ == "__main__":
 
     # 创建GraphRetriever实例
     retriever = GraphRetriever(
-        model="qwen2.5-14b-instruct",  # 指定使用的LLM模型
+        model=get_model("retriever"),  # 指定使用的LLM模型
         type="api",  # 指定模型类型
         knowledge_graph_path=knowledge_graph_path
     )

@@ -4,6 +4,8 @@
 
 **代码阅读基线**：迁移实现主要来自 `b801441`，统一运行入口与 EDA 部署来自 `b4cbee2`，本 PR 的共用工作流修复为 `5035aaa`。文档补充不改变这份已完成双后端验收的业务源码。PR：[sxswa1/SACK#1](https://github.com/sxswa1/SACK/pull/1)，head `codex/titanic-workflow-fix`，base `codex/tugraph-migration`，保持 Draft。
 
+2026-10-15/16 后续加入了 `.env` 自动加载与集中模型配置，并更换已下线的默认代码/视觉模型；这些改造有独立回归及接口验证，旧第十二版和 Kaggle 结果对应当时的模型与配置，不能作为新模型下的端到端验收。
+
 ## 阅读目录
 
 1. [接手速览](#chapter-1)
@@ -634,12 +636,14 @@ EDA deployment README 的离线检查只证明 EDA 运行时，明确不包含�
 | --- | --- | --- |
 | 阶段、工具、测试名 | `sack/config.json` / `SACK_CONFIG_PATH` | SOP/State 按固定路径读取；framework 的 config_path 参数不是完整配置切换接口 |
 | LLM Key 与 URL | `sack/api_key.txt` | 第一行 Key，后面三行分别为通用/coder/视觉 URL；只放运行环境，不能提交 |
-| 模型选择 | `sop.py`、`api_handler.py` | 当前角色映射 qwen-plus/coder/vl；本次未实现任意 provider 自动适配 |
+| 模型选择 | `.env` / `model_config.py` 的 `get_model()` | GENERAL、CODER、VISION、EMBEDDING 可配置，各角色可单独覆盖；未实现任意 provider 自动适配 |
 | 图后端 | 显式参数 → `SACK_AGENT_GRAPH_BACKEND` → `SACK_GRAPH_BACKEND` → graphdb | 显式参数最高；切换后需重新创建门面对象 |
 | TuGraph | `SACK_TUGRAPH_BOLT_URL/GRAPH/USER/PASSWORD` | 密码从运行环境提供，Bolt graph 应指向已验证批次 |
 | PostgreSQL | `SACK_PG_HOST/USER/PORT/PASSWORD/PASSWORD_FILE` | 门面显式参数优先；密码环境变量优于密码文件，旧默认只作兼容 |
 | Chroma 工具缓存 | `SACK_CHROMA_DB_PATH` | 这是工具文档向量库，与案例 pgvector 不同；新任务隔离可避免并发覆盖 |
 | 资产/历史路径 | `knowledge_config.py` 及 [paths.py](../sack/paths.py) | 多个历史环境变量保留了 SACK_SACK 前缀，照实际代码配置，不自行改名 |
+
+模型名统一由 [model_config.py](../sack/model_config.py) 解析：`SACK_MODEL_GENERAL=qwen-plus`、`SACK_MODEL_CODER=qwen3.7-plus`、`SACK_MODEL_VISION=qwen3.6-flash`、`SACK_MODEL_EMBEDDING=text-embedding-v3`。Reader、Planner、Reviewer、Summarizer、Retriever 和知识要素提取默认继承 GENERAL；Developer、DebugTool 和 TestTool 默认继承 CODER，可通过模板中的对应角色键分别覆盖。通用/代码/视觉接口仍分别来自 `api_key.txt` 第 2/3/4 行，调用方显式传递接口角色，因此相同模型 ID 也可绑定不同接口。图片工具选择的模型会传到实际图片读取请求；旧知识嵌入客户端使用独立的 `SACK_MODEL_KNOWLEDGE_EMBEDDING`，保留原向量契约。改变工具嵌入模型须保持 1024 维并重建相关 Chroma 缓存，不能沿用另一模型生成的旧向量。模型切换未替代完整工作流验收。 2026-10-16 的配置改造、服务器备份与验证范围见 [模型配置记录](../reports/sack-model-env-20261016.md)。
 
 [APIHandler](../sack/api_handler.py#L36) 实际读取四行文件，不自动读取 OPENAI_API_KEY。工具文档的 `text-embedding-v3` 为 1024 维，案例 profile/列模型为 300 维，不能混用这两类向量。模型请求和远程工具嵌入均会消耗 API 额度。
 

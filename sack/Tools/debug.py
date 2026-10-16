@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 from sack.LLMComponent.llm import OpenaiEmbeddings, LLM
+from sack.model_config import get_model
 from sack.state import State
 from sack.utils import load_config
 from sack.Prompts.prompt_developer import *
@@ -15,10 +16,10 @@ from sack.Prompts.prompt_developer import *
 class DebugTool: # 调试工具
     def __init__(
         self,
-        model: str = 'qwen3-coder-plus',
+        model: str | None = None,
         type: str = 'api'       
     ):
-        self.llm = LLM(model, type)
+        self.llm = LLM(model if model is not None else get_model("debug"), type, endpoint_role="coder")
 
     # 带着代码运行错误来调试，让llm根据错误信息定位错误段
     def debug_code_with_error(self, state: State, all_error_messages: list, output_messages: str, previous_code: str, wrong_code: str, error_messages: str, tools: str, tool_names: list) -> str:

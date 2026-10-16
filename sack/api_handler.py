@@ -7,6 +7,8 @@ from dataclasses import dataclass
 import openai
 import httpx
 
+from sack.model_config import get_model, infer_endpoint_role
+
 # Constants
 DIR = os.path.dirname(os.path.abspath(__file__))
 API_KEY_FILE = f'{DIR}/api_key.txt'
@@ -96,17 +98,14 @@ def generate_response(client: openai.OpenAI, model: str, messages: List[Dict[str
     return response
 
 class APIHandler:
-    def __init__(self, model: str):
+    def __init__(self, model: str, *, endpoint_role: str | None = None):
         self.model = model
         self.api_key, base_url1, base_url2,base_url3 = load_api_config()
-        if model == 'qwen-plus':
-            self.base_url = base_url1
-        elif model in ('qwen3-coder-plus', 'qwen3-coder-30b-a3b-instruct'):
-            self.base_url = base_url2
-        elif model == 'qwen3-vl-flash':
-            self.base_url = base_url3
-        else:
-            self.base_url = base_url1  
+        self.endpoint_role = endpoint_role if endpoint_role is not None else infer_endpoint_role(model)
+        endpoints = {"general": base_url1, "coder": base_url2, "vision": base_url3}
+        if self.endpoint_role not in endpoints:
+            raise ValueError(f"Unknown model endpoint role: {self.endpoint_role}")
+        self.base_url = endpoints[self.endpoint_role]
         self.client = openai.OpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
@@ -141,6 +140,7 @@ class APIHandler:
         return truncated
 
     def get_output(self, messages: List[Dict[str, str]], settings: APISettings, enable_thinking=True, response_type: str = 'text') -> str:
+        last_error = None
         for attempt in range(MAX_ATTEMPTS):
             try:
                 response = generate_response(self.client, self.model, messages, settings, response_type, enable_thinking)
@@ -148,7 +148,11 @@ class APIHandler:
                     return response.choices[0].message.content
                 else:
                     return "Error: Wrong response format."
+            except openai.NotFoundError:
+                # Missing model IDs cannot recover by retrying the same request.
+                raise
             except openai.BadRequestError as error:
+                last_error = error
                 error_message = str(error)
                 if "string too long" in error_message or "maximum context length" in error_message:
                     logging.error(f"Message too long. Attempting to truncate.")
@@ -158,15 +162,17 @@ class APIHandler:
                 else:
                     logging.error(f'Attempt {attempt + 1} of {MAX_ATTEMPTS} failed with error: {error}')
             except (TimeoutError, openai.APIError, openai.APIConnectionError, openai.RateLimitError) as error:
+                last_error = error
                 logging.error(f'Attempt {attempt + 1} of {MAX_ATTEMPTS} failed with error: {error}')
 
             if attempt < MAX_ATTEMPTS - 1:
                 time.sleep(RETRY_DELAY)
-            else:
-                return f"Error: Max attempts reached. Last error: {error}"
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("No model request attempt was made")
 
 if __name__ == '__main__':
-    handler = APIHandler('Qwen3-32b-fp8')
+    handler = APIHandler(get_model("general"), endpoint_role="general")
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "How are you today?"}

@@ -29,7 +29,8 @@ class Agent:
 
         self.role = role
         self.description = description
-        self.llm = LLM(model, type)
+        endpoint_role = "coder" if "developer" in role.lower() else "general"
+        self.llm = LLM(model, type, endpoint_role=endpoint_role)
         self.model = model
         logger.info(f'Agent {self.role} is created with model {model}.')
         self._sack_case_retriever = None

@@ -3,14 +3,15 @@ import sys
 
 import httpx
 from typing import List, Tuple
+from sack.model_config import get_model
 from sack.api_handler import APIHandler
 from sack.utils import multi_chat
 from openai import OpenAI
 import tiktoken
 class LLM:
-    def __init__(self, model: str, type: str):
+    def __init__(self, model: str, type: str, endpoint_role: str | None = None):
         if type == 'api':
-            self.api_handler = APIHandler(model)
+            self.api_handler = APIHandler(model, endpoint_role=endpoint_role)
         elif type == 'local':
             pass
 
@@ -18,9 +19,9 @@ class LLM:
         return multi_chat(self.api_handler, prompt, history, max_completion_tokens,enable_thinking)
     
 class OpenaiEmbeddings:
-    def __init__(self, api_key: str, base_url: str = None, model: str = 'text-embedding-v3'):
+    def __init__(self, api_key: str, base_url: str = None, model: str | None = None):
         self.client = OpenAI(api_key=api_key, base_url=base_url,http_client=httpx.Client(verify=False))
-        self.model = model
+        self.model = model if model is not None else get_model("embedding")
 
         
     def num_tokens_from_string(string: str, encoding_name: str = 'cl100k_base') -> int:
