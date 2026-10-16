@@ -1,0 +1,163 @@
+{
+  "checked_at": "2026-10-04T23:49:59.524917+00:00",
+  "experiment": "/opt/sack-backend-compare-20261004-fix12",
+  "source_manifest_sha256": "c79efd84db2061d7ffcf312837e562c2f5345bee651c0b2f83a86cc4c8a54d96",
+  "immutable_source_files_verified_each": 262,
+  "entire_nonruntime_source_files_equal_each": 266,
+  "source_directory_equal": true,
+  "model_config_hashes": {
+    "graphdb": "5676b0d3cdab8e5f54ca2b038f3c69523c3175b25f3bd953680095e4418a158d",
+    "tugraph": "5676b0d3cdab8e5f54ca2b038f3c69523c3175b25f3bd953680095e4418a158d"
+  },
+  "shared_launch_sha256": "e7228c61b7a0cd40d26315d3d1065c6090c23f3cd977f6238bb0bf2b94ce91d6",
+  "acceptance_script_sha256": "2063e17e7e48a9040e5f21119ee0c2eb6b8d019211655d58002e1617d5baf4ba",
+  "raw_input_hashes_equal": true,
+  "raw_input_manifests": {
+    "graphdb": {
+      "competitions": {
+        "train.csv": "4a437fde05fe5264e1701a7387ac6fb75393772ba38bb2c9c566405af5af4bd7",
+        "test.csv": "5c78320a80dc159b35c408363be46a5d93f078183d539db75ee42a796d6a4e95",
+        "overview.txt": "0bebd0c2c312335524fda9d2c73158604f89b83b536856e79dbb458c8bd24ace",
+        "sample_submission.csv": "af6609cdf1dad0b699bd3414c13e999b2c2f651972f0938254a835985d584306"
+      },
+      "eda_competitions": {
+        "train.csv": "4a437fde05fe5264e1701a7387ac6fb75393772ba38bb2c9c566405af5af4bd7",
+        "test.csv": "5c78320a80dc159b35c408363be46a5d93f078183d539db75ee42a796d6a4e95",
+        "overview.txt": "0bebd0c2c312335524fda9d2c73158604f89b83b536856e79dbb458c8bd24ace",
+        "sample_submission.csv": "af6609cdf1dad0b699bd3414c13e999b2c2f651972f0938254a835985d584306"
+      }
+    },
+    "tugraph": {
+      "competitions": {
+        "train.csv": "4a437fde05fe5264e1701a7387ac6fb75393772ba38bb2c9c566405af5af4bd7",
+        "test.csv": "5c78320a80dc159b35c408363be46a5d93f078183d539db75ee42a796d6a4e95",
+        "overview.txt": "0bebd0c2c312335524fda9d2c73158604f89b83b536856e79dbb458c8bd24ace",
+        "sample_submission.csv": "af6609cdf1dad0b699bd3414c13e999b2c2f651972f0938254a835985d584306"
+      },
+      "eda_competitions": {
+        "train.csv": "4a437fde05fe5264e1701a7387ac6fb75393772ba38bb2c9c566405af5af4bd7",
+        "test.csv": "5c78320a80dc159b35c408363be46a5d93f078183d539db75ee42a796d6a4e95",
+        "overview.txt": "0bebd0c2c312335524fda9d2c73158604f89b83b536856e79dbb458c8bd24ace",
+        "sample_submission.csv": "af6609cdf1dad0b699bd3414c13e999b2c2f651972f0938254a835985d584306"
+      }
+    }
+  },
+  "sequential_runs_verified": true,
+  "runtime_limit_seconds": 21600,
+  "local_regressions": 221,
+  "runs": {
+    "graphdb": {
+      "started_at": "2026-10-04T12:29:43.923697+00:00",
+      "finished_at": "2026-10-04T15:04:33.741031+00:00",
+      "exit_code": 0,
+      "intentional_stop": false,
+      "rawdata_unchanged": true,
+      "acceptance": {
+        "backend": "graphdb",
+        "checks": {
+          "exit_success_and_not_stopped": true,
+          "rawdata_unchanged": true,
+          "dsp_completion_logged": true,
+          "eda_status_success": true,
+          "pre_insight_extraction": {
+            "unknowns": 0,
+            "required_fields_and_tools_complete": true
+          },
+          "deep_insight_extraction": {
+            "unknowns": 0,
+            "required_fields_and_tools_complete": true
+          },
+          "cleaned_train.csv": true,
+          "cleaned_test.csv": true,
+          "processed_train.csv": true,
+          "processed_test.csv": true,
+          "processed_predictors": {
+            "train_predictors": 38,
+            "test_predictors": 38,
+            "matching_predictors": true
+          },
+          "profile": {
+            "train.csv": 12,
+            "test.csv": 11
+          },
+          "predictions": {
+            "path": "/opt/sack-backend-compare-20261004-fix12/graphdb/repo/data/competitions/titanic/submission.csv",
+            "rows": 418,
+            "columns": [
+              "id",
+              "Survived"
+            ],
+            "binary_labels": true,
+            "original_submission_schema_matches": false
+          }
+        },
+        "errors": [],
+        "accepted": true
+      },
+      "runtime_state": {
+        "titanic": "success"
+      },
+      "service_active": "inactive"
+    },
+    "tugraph": {
+      "started_at": "2026-10-04T15:05:27.178749+00:00",
+      "finished_at": "2026-10-04T17:37:21.479042+00:00",
+      "exit_code": 0,
+      "intentional_stop": false,
+      "rawdata_unchanged": true,
+      "acceptance": {
+        "backend": "tugraph",
+        "checks": {
+          "exit_success_and_not_stopped": true,
+          "rawdata_unchanged": true,
+          "dsp_completion_logged": true,
+          "eda_status_success": true,
+          "pre_insight_extraction": {
+            "unknowns": 0,
+            "required_fields_and_tools_complete": true
+          },
+          "deep_insight_extraction": {
+            "unknowns": 0,
+            "required_fields_and_tools_complete": true
+          },
+          "cleaned_train.csv": true,
+          "cleaned_test.csv": true,
+          "processed_train.csv": true,
+          "processed_test.csv": true,
+          "processed_predictors": {
+            "train_predictors": 12,
+            "test_predictors": 12,
+            "matching_predictors": true
+          },
+          "profile": {
+            "train.csv": 12,
+            "test.csv": 11
+          },
+          "predictions": {
+            "path": "/opt/sack-backend-compare-20261004-fix12/tugraph/repo/data/competitions/titanic/submission.csv",
+            "rows": 418,
+            "columns": [
+              "id",
+              "Survived"
+            ],
+            "binary_labels": true,
+            "original_submission_schema_matches": false
+          }
+        },
+        "errors": [],
+        "accepted": true
+      },
+      "runtime_state": {
+        "titanic": "success"
+      },
+      "service_active": "inactive"
+    }
+  },
+  "limitations": [
+    "Standardized id/Survived differs from original Kaggle PassengerId/Survived; no Kaggle submission.",
+    "Identical code/configuration/input does not imply identical stochastic outputs or comprehensive backend equivalence.",
+    "This acceptance validates workflow and output structure, not held-out Kaggle accuracy."
+  ],
+  "local_immutable_source_files_verified": 262,
+  "local_source_matches_tested_manifest": true
+}

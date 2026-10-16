@@ -1,4 +1,4 @@
-﻿import bitstring
+﻿from sack.runtime_support import float32_bits
 import torch
 import numpy as np
 
@@ -7,7 +7,7 @@ from sack.knowledge.kg_governor.data_profiling.model.column_profile import Colum
 
 
 class NumericalProfileCreator(ProfileCreator):
-    
+
     def create_profile(self):
         self._calculate_stats()
         self._generate_embedding()
@@ -24,14 +24,14 @@ class NumericalProfileCreator(ProfileCreator):
 
     def _calculate_stats(self):
         summary = self.column.describe().dropna()
-        self.mean = summary['mean'].item() if 'mean' in summary.index else None
-        self.std = summary['std'].item() if 'std' in summary.index else None
-        self.min = summary['min'].item() if 'min' in summary.index else None
-        self.max = summary['max'].item() if 'max' in summary.index else None
-        self.median = summary['50%'].item() if '50%' in summary.index else None
-        self.iqr = (summary['75%'] - summary['25%']).item() if '75%' in summary.index else None
+        self.mean = float(summary['mean']) if 'mean' in summary.index else None
+        self.std = float(summary['std']) if 'std' in summary.index else None
+        self.min = float(summary['min']) if 'min' in summary.index else None
+        self.max = float(summary['max']) if 'max' in summary.index else None
+        self.median = float(summary['50%']) if '50%' in summary.index else None
+        self.iqr = float(summary['75%'] - summary['25%']) if '75%' in summary.index else None
 
-    
+
     def _preprocess_column_for_embedding_model(self, device='cpu') -> torch.tensor:
         non_missing = self.column.dropna()
         non_missing = non_missing.astype(np.float32)
@@ -40,8 +40,6 @@ class NumericalProfileCreator(ProfileCreator):
         else:
             sample = non_missing.sample(min(len(non_missing), 1000))
 
-        bin_repr = [[int(j) for j in bitstring.BitArray(float=i, length=32).bin]
-                    for i in sample.values]
+        bin_repr = [float32_bits(i) for i in sample.values]
         input_tensor = torch.FloatTensor(bin_repr).to(device)
         return input_tensor
-

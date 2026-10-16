@@ -1,0 +1,36 @@
+{
+  "competition": "titanic",
+  "submission_page": "https://www.kaggle.com/competitions/titanic/submissions",
+  "observed_on": "2026-10-06",
+  "timezone": "Asia/Shanghai",
+  "source": "Kaggle submissions page shows Success and Complete for both filenames",
+  "source_commit": "5035aaa347255dd219ff3227817f9d1d313bcef9",
+  "submissions": {
+    "graphdb": {
+      "filename": "graphdb-kaggle-submission.csv",
+      "status": "Complete",
+      "public_score": 0.72488,
+      "sha256": "5876cb5c049ae3016754837309dcd0d02b0d4fa4c28f5d45579200a781a5e5e5",
+      "original_prediction_sha256": "5c0376fd1702442dc84e278fd1d44248a48f7f1f3800933c48cb4a5c0ac2c543",
+      "rows": 418,
+      "submitted_headers": [
+        "PassengerId",
+        "Survived"
+      ]
+    },
+    "tugraph": {
+      "filename": "tugraph-kaggle-submission.csv",
+      "status": "Complete",
+      "public_score": 0.78468,
+      "sha256": "a2a07ad0085366c4ec1061cda895a8adfbd1b2da8692abd2f41d67530dd966c8",
+      "original_prediction_sha256": "ff2b4ba88da8f312bb02dc649ee5075cdafc925df3f0a7f53e1a76f7dfa7a722",
+      "rows": 418,
+      "submitted_headers": [
+        "PassengerId",
+        "Survived"
+      ]
+    }
+  },
+  "prediction_payload_unchanged": true,
+  "note": "Post-validation user-authorized submissions. Only headers changed; original fix12 runtime artifacts and historical acceptance records are unchanged. Scores observed in authenticated Kaggle submissions UI."
+}

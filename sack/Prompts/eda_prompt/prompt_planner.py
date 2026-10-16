@@ -1,13 +1,14 @@
 PROMPT_PLANNER_TASK = '''
-Please design plan that ensures COMPLETE data exploration coverage for the current phase: {phase_name}. 
-The developer will execute tasks based on your plan by calling predefined tools. 
+Please design plan that ensures COMPLETE data exploration coverage for the current phase: {phase_name}.
+The developer will execute tasks based on your plan by calling predefined tools.
 I will provide you with INFORMATION, RESOURCE CONSTRAINTS, and previous reports and plans.
 You MUST use the following EDA-specific reasoning pattern:
 1. Analyze Competition background and data characteristics to identify necessary exploration dimensions, as comprehensive as possible
-2. Select appropriate PREDEFINED EDA TOOLS to cover all key exploration dimensions  
+2. Select appropriate PREDEFINED EDA TOOLS to cover all key exploration dimensions
 3. Consider tool dependencies and arrange in logical execution order
 4. For each tool, specify CORRECT parameters (use defaults if not specified)
-5. The tasks planned and the tools used must be applicable to the current competition (for example, time series analysis cannot be planned or time series analysis tools cannot be used for non-time series competitions)
+5. Cover every field of the phase EDAInsight template with real predefined tool outputs. For optional temporal/spatial properties, use the predefined tool's applicability detection and its documented no-applicable-data return. Do not invent time or coordinate columns, fabricate statistics, or omit required fields solely because the data is not temporal/spatial.
+6. Require every tool result to be printed to stdout, labeled with the exact tool name. The Summarizer does not read separate result files. Use the appropriate classification OR regression tool for the actual target; do not run both unnecessarily.
 '''
 
 
@@ -53,7 +54,7 @@ Currently, I am at phase: {phase_name}.
 ## PLANNING GUIDELINES ##
 1. **Tool-Only Constraint**: The exploration logic must be implemented by predefined tools rather than created by custom ones
 2. **Practical Feasibility**: Prioritize tools that match the data characteristics
-3. **Conservative Coverage**: Omit tools that cannot be executed with the available data
+3. **Template Coverage**: Include tools for every required EDAInsight field, including applicability detection for temporal/spatial properties. If a tool fails, expose the error and correct its inputs; never replace failed results with made-up defaults.
 4. **Efficiency**: Avoid redundant tool calls
 
 #############
@@ -132,7 +133,7 @@ Expected output or Impact on data: [The expected output of the action or the imp
 Constraints: [Any constraints or considerations to keep in mind]
 
 ### STEP 2
-Task: [The specific task to be performed]  
+Task: [The specific task to be performed]
 Tools, involved features and correct parameters: [The tools, involved features and correct parameters to be used]
 Expected output or Impact on data: [The expected output of the action or the impact of the action on the data]
 Constraints: [Any constraints or considerations to keep in mind]
@@ -156,18 +157,20 @@ Please extract essential information from your answer and reorganize into the sp
 
 #############
 # RESPONSE: JSON FORMAT #
+Return exactly one valid JSON object, with no prose or type annotations.
+Keep the plan concise enough to finish the object within the response limit.
 Here is the JSON format you should follow:
 ```json
-{{
-    "final_answer": list=[
-        {{
-            "task": str="The specific task to be performed",
-            "tools, involved features and correct parameters": list=["The tools, involved features and correct parameters to be used"],
-            "expected output or impact on data": list=["The expected output of the action or the impact of the action on the data"],
-            "constraints": list=["Any constraints or considerations to keep in mind"]
-        }}
+{
+    "final_answer": [
+        {
+            "task": "The specific task to be performed",
+            "tools, involved features and correct parameters": ["The tools, involved features and correct parameters to be used"],
+            "expected output or impact on data": ["The expected output of the action or the impact of the action on the data"],
+            "constraints": ["Any constraints or considerations to keep in mind"]
+        }
     ]
-}}
+}
 ```
 
 #############

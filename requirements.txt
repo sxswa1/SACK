@@ -2,6 +2,7 @@
 # Python 3.10 is recommended for AutoDL/Linux deployment.
 
 # Core SACK runtime
+python-dotenv==1.0.1
 catboost==1.2.6
 chardet==5.2.0
 chromadb==0.5.5

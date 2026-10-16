@@ -186,6 +186,9 @@ class State:
             phases = load_config(CONFIG_PATH)['eda_phases']
         current_phase_index = phases.index(self.phase)
 
+        if current_phase_index == 0:
+            return [] if type == 'plan' else None
+
         if type == 'code':
             if self.phase == 'Data Cleaning' or self.phase == 'PEDA Insight Extraction':
                 return 'Understand Background'
@@ -241,6 +244,9 @@ class State:
         self.current_step += 1
 
     def set_score(self) -> None:
+        if self.memory[-1].get('summarizer', {}).get('quality_valid') is False:
+            self.score = 0
+            return
         final_score = self.memory[-1]['reviewer']['score']
         if final_score.get('agent developer', 3) == 0: # developer的分数为0 表示代码没通过 阶段的执行分数就是0
             self.score = 0

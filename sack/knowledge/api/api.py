@@ -4,7 +4,8 @@ from collections import Counter
 from sack.knowledge.knowledge_config import SACKKnowledgeConfig
 import pandas as pd
 import os
-from sack.knowledge.api.utils import profile_single_competition,get_current_competition_edainsight   # 导入utils方法
+import math
+from sack.knowledge.api.utils import profile_single_competition, profile_input_manifest, get_current_competition_edainsight
 from sack.knowledge.storage_utils.get_current_comp_eda_files import copy_eda_files
 from sack.knowledge.stores.factory import create_agent_graph_store
 from tqdm import tqdm
@@ -18,15 +19,29 @@ class SACKKnowledgeBase:
                  endpoint: str = 'http://localhost:7200',
                  db: str = 'sack_knowledge',
 
-                 pg_host: str = 'localhost',# PostgreSQL配置
-                 pg_user: str = 'postgres',
-                 pg_password: str = 'postgres',
+                 pg_host: Optional[str] = None,# PostgreSQL配置
+                 pg_user: Optional[str] = None,
+                 pg_password: Optional[str] = None,
                  pg_competition_db: str = SACKKnowledgeConfig.competition_embeddings_db_name,  # 竞赛嵌入库名
                  pg_column_db: str = SACKKnowledgeConfig.column_embeddings_db_name,  # 列嵌入库名
-                 pg_port: str =SACKKnowledgeConfig.postgresql_port,
+                 pg_port: Optional[str] = None,
                  graph_store=None,
                  graph_backend: str = None,
                  ):
+        # Explicit arguments win; deployments can supply credentials without
+        # changing Agent call sites or putting secrets in the repository.
+        pg_host = pg_host if pg_host is not None else os.environ.get('SACK_PG_HOST', 'localhost')
+        pg_user = pg_user if pg_user is not None else os.environ.get('SACK_PG_USER', 'postgres')
+        pg_port = pg_port if pg_port is not None else os.environ.get('SACK_PG_PORT', SACKKnowledgeConfig.postgresql_port)
+        if pg_password is None:
+            pg_password = os.environ.get('SACK_PG_PASSWORD')
+            if pg_password is None:
+                password_file = os.environ.get('SACK_PG_PASSWORD_FILE')
+                if password_file:
+                    with open(password_file, encoding='utf-8') as credentials:
+                        pg_password = credentials.read().strip()
+                else:
+                    pg_password = 'postgres'
         self.conn = connect_to_graphdb(endpoint, graphdb_repo=db)
         self.graph_store = (
             graph_store
@@ -274,7 +289,8 @@ class SACKKnowledgeBase:
             self,
             comp_id: str,
             persist_path: Optional[str] = None,
-            force_regenerate: bool = False
+            force_regenerate: bool = False,
+            source_path: Optional[str] = None,
     ) -> Dict:
         """
         独立算子：生成并校验竞赛的current_comp，支持持久化和读取
@@ -288,7 +304,7 @@ class SACKKnowledgeBase:
             Dict: 校验后的current_comp字典
         """
         # 1. 拼接竞赛路径
-        comp_path = os.path.join(SACKKnowledgeConfig.current_comp_path, comp_id)
+        comp_path = source_path or os.path.join(SACKKnowledgeConfig.current_comp_path, comp_id)
 
         # 2. 校验竞赛路径有效性（公共逻辑抽离）
         if not os.path.exists(comp_path):
@@ -296,11 +312,12 @@ class SACKKnowledgeBase:
         if not os.path.isdir(comp_path) and not comp_path.endswith(('.json', '.csv')):
             raise ValueError(f"无效的竞赛路径（需文件夹或json/csv文件）：{comp_path}")
 
+        input_manifest = profile_input_manifest(comp_path)
         # 3. 持久化文件路径（用comp_id命名，避免冲突）
         persist_file = None
         if persist_path:
             os.makedirs(persist_path, exist_ok=True)  # 确保目录存在
-            persist_file = os.path.join(persist_path, f"{comp_id}_profile.json")
+            persist_file = os.path.join(persist_path, f"{os.path.basename(comp_id)}_profile.json")
 
         # 4. 优先读取持久化文件（如果存在且不强制重新生成）
         if not force_regenerate and persist_file and os.path.exists(persist_file):
@@ -310,6 +327,8 @@ class SACKKnowledgeBase:
                 print(f"从持久化文件读取竞赛profile：{persist_file}")
                 # 读取后仍校验（防止文件被篡改）
                 self._validate_current_comp(current_comp)
+                if current_comp.get('input_manifest') != input_manifest:
+                    raise ValueError('Profile input changed or legacy cache has no input hashes')
                 return current_comp
             except Exception as e:
                 print(f"读取持久化profile失败，将重新生成：{str(e)}")
@@ -325,7 +344,9 @@ class SACKKnowledgeBase:
                 "data_description_embedding": competition_profile_dict["data_description_embedding"],
                 "problem_type": competition_profile_dict["structured_elements"]["problem_type"],
                 "data_type": competition_profile_dict["structured_elements"]["data_type"],
-                "tables": column_profiles_list
+                "tables": column_profiles_list,
+                "input_manifest": input_manifest,
+                "profile_schema_version": 2,
             }
             print(f"成功生成竞赛profile：{current_comp.get('comp_id', '未知ID')}")
         except Exception as e:
@@ -357,11 +378,27 @@ class SACKKnowledgeBase:
             if field not in current_comp:
                 raise ValueError(f"生成的current_comp缺少必需字段：{field}")
 
+        if not current_comp.get('tables'):
+            raise ValueError('Profile contains no tables')
         # 列嵌入字段校验
         for table in current_comp.get("tables", []):
+            columns = table.get('columns', [])
+            if not columns:
+                raise ValueError(f"Profile table has no columns: {table.get('table_name')}")
+            if 'expected_columns' in table:
+                actual = [column.get('col_name') for column in columns]
+                if sorted(actual) != sorted(table['expected_columns']):
+                    raise ValueError(f"Profile column coverage incomplete: {table.get('table_name')}")
             for col in table.get("columns", []):
                 if "label_embedding" not in col or "content_embedding" not in col:
                     raise ValueError(f"表 {table.get('table_name')} 的列 {col.get('col_name')} 缺少嵌入字段")
+                if current_comp.get('profile_schema_version') == 2:
+                    for field in ('label_embedding', 'content_embedding'):
+                        vector = col[field]
+                        if (not isinstance(vector, list) or len(vector) != 300 or
+                                any(not isinstance(value, (int, float)) or isinstance(value, bool)
+                                    or not math.isfinite(value) for value in vector)):
+                            raise ValueError(f"Invalid {field} in {table.get('table_name')}/{col.get('col_name')}")
 
 
 
@@ -622,11 +659,11 @@ class SACKKnowledgeBase:
             raise RuntimeError(f"获取EDAInsight失败：{str(e)}") from e
 
         # 4. 结果处理（完善用户原有代码的日志和空值处理）
-        if insights_df.empty:
+        if not isinstance(insights_df, dict):
+            raise TypeError('EDA core must return a module/field dictionary')
+        if not insights_df:
             print("未查询到任何EDAInsight")
-            return pd.DataFrame(
-                columns=["Field_Path", "Module", "Value", "Field_Type", "Storage_Attr"]
-            )
+            return {}
 
         print(f"\n=== EDAInsight查询结果 ===")
         print(f"目标竞赛URI：{competition_uri}")

@@ -5,6 +5,7 @@ dependencies:
   - python=3.10
   - pip
   - pip:
+      - python-dotenv==1.0.1
       - astor==0.8.1
       - camelsplit==1.0.1
       - numpy==1.24.4

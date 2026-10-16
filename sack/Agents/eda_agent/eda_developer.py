@@ -51,7 +51,7 @@ class EDADeveloper(Developer):
         history.append({
             "role": "system",
             "content": f"{role_prompt}You MUST call ONLY predefined EDA tools (no custom implementation) to complete the plan. {self.description} "
-                       f"When you are writing code, you should follow the following constraints.\n{constraints}"
+                       f"{task}\nWhen you are writing code, you should follow the following constraints.\n{constraints}"
         })
 
         if len(state.memory) != 1:
@@ -60,7 +60,10 @@ class EDADeveloper(Developer):
             experience_with_suggestion = self._gather_experience_with_suggestion(state)
 
         # 多轮生成/调试逻辑（保留核心流程）
-        while round <= max_tries:
+        total_cycles = 0
+        while round <= max_tries and total_cycles < 2 * max_tries:
+            total_cycles += 1
+            # Count HELP/regeneration cycles as well as execution attempts.
             if round == 0 or retry_flag or no_code_flag:
                 if len(state.memory) == 1:
                     # 第一轮没有经验，生成代码。

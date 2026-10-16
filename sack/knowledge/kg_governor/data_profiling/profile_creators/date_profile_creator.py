@@ -1,6 +1,6 @@
 import os
 
-import bitstring
+from sack.runtime_support import float32_bits
 import dateparser
 import pandas as pd
 import torch
@@ -14,10 +14,10 @@ from sack.knowledge.kg_governor.data_profiling.column_embeddings.column_embeddin
 from sack.knowledge.knowledge_config import SACKKnowledgeConfig
 
 class DateProfileCreator(ProfileCreator):
-    
+
     def __init__(self, column: pd.Series, table: Table):
         super().__init__(column, table)
-        
+
         self.data_type = ColumnDataType.DATE
 
         embedding_model_path = os.path.join(SACKKnowledgeConfig.column_embedding_models_dir, 'date/20230113111008_date_model_embedding_epoch_100.pt')
@@ -25,8 +25,8 @@ class DateProfileCreator(ProfileCreator):
 
         self.embedding_model = load_pretrained_model(NumericalEmbeddingModel, embedding_model_path)
         self.scaling_model = load_pretrained_model(NumericalScalingModel, scaling_model_path)
-    
-    
+
+
     def create_profile(self):
         self._generate_embedding()
 
@@ -38,8 +38,8 @@ class DateProfileCreator(ProfileCreator):
                                        missing_values_count=self.missing_values_count,
                                        embedding=self.embedding, embedding_scaling_factor=self.embedding_scaling_factor)
         return column_profile
-    
-    
+
+
     def _preprocess_column_for_embedding_model(self, device='cpu') -> torch.tensor:
         non_missing = self.column.dropna()
         if len(non_missing) > 10000:
@@ -48,9 +48,9 @@ class DateProfileCreator(ProfileCreator):
             sample = non_missing.sample(min(len(non_missing), 1000))
         dates = sample.apply(lambda x: dateparser.parse(x, locales=['en-CA'], languages=['en']))
         timestamps = dates.dropna().apply(lambda x: x.timestamp())
-        bin_repr = [[int(j) for j in bitstring.BitArray(float=float(i), length=32).bin] for i in timestamps]
+        bin_repr = [float32_bits(i) for i in timestamps]
         input_tensor = torch.FloatTensor(bin_repr).to(device)
         return input_tensor
-    
+
     def _calculate_stats(self):
         pass

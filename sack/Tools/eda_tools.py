@@ -1,3 +1,4 @@
+from functools import wraps as _wraps
 import pandas as pd
 import numpy as np
 from typing import List, Dict, Any
@@ -1556,20 +1557,21 @@ def detect_conditional_dependencies(data: pd.DataFrame,
 
                 # Calculate partial correlation (residual-based)
                 try:
-                    # Regress col1/col2 on conditioner
-                    X_cond = data[[cond_col]].dropna()
-                    if len(X_cond) < 10:
+                    # All three variables must use the same finite observations.
+                    sample = data[[cond_col, col1, col2]].replace([np.inf, -np.inf], np.nan).dropna()
+                    if len(sample) < 10:
                         continue
-                    # Col1 residuals
-                    reg1 = LinearRegression().fit(X_cond, data.loc[X_cond.index, col1].dropna())
-                    residuals1 = data.loc[X_cond.index, col1].dropna() - reg1.predict(X_cond)
-                    # Col2 residuals
-                    reg2 = LinearRegression().fit(X_cond, data.loc[X_cond.index, col2].dropna())
-                    residuals2 = data.loc[X_cond.index, col2].dropna() - reg2.predict(X_cond)
-                    # Correlate residuals
-                    if len(residuals1) >= 5 and len(residuals2) >= 5:
-                        partial_corr, _ = stats.pearsonr(residuals1, residuals2)
-                        conditional_strengths.append(abs(partial_corr))
+                    X_cond = sample[[cond_col]]
+                    reg1 = LinearRegression().fit(X_cond, sample[col1])
+                    residuals1 = sample[col1] - reg1.predict(X_cond)
+                    reg2 = LinearRegression().fit(X_cond, sample[col2])
+                    residuals2 = sample[col2] - reg2.predict(X_cond)
+                    # Constant residuals have no defined Pearson correlation.
+                    if residuals1.nunique() < 2 or residuals2.nunique() < 2:
+                        continue
+                    partial_corr, _ = stats.pearsonr(residuals1, residuals2)
+                    if np.isfinite(partial_corr):
+                        conditional_strengths.append(abs(float(partial_corr)))
                 except:
                     continue
 
@@ -1579,7 +1581,7 @@ def detect_conditional_dependencies(data: pd.DataFrame,
             "conditional_dependency_strength": 0.0
         }
 
-    avg_strength = np.mean(conditional_strengths)
+    avg_strength = float(np.mean(conditional_strengths))
     return {
         "has_conditional_dependencies": avg_strength > 0.3,  # Fixed threshold for consistency
         "conditional_dependency_strength": round(avg_strength, 4)
@@ -1853,3 +1855,31 @@ def analyze_high_cardinality_impact(data: pd.DataFrame, target_column: str = Non
         "high_cardinality_ratio": round(high_card_ratio, 4),
         "high_cardinality_impact": round(high_card_impact, 4)
     }
+
+
+
+def _native_tool_result(value):
+    """Keep tool metrics JSON-compatible without changing their values."""
+    if isinstance(value, np.generic):
+        return _native_tool_result(value.item())
+    if isinstance(value, np.ndarray):
+        return _native_tool_result(value.tolist())
+    if isinstance(value, dict):
+        return {key: _native_tool_result(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_native_tool_result(item) for item in value]
+    return value
+
+
+def _wrap_tool_result(tool):
+    @_wraps(tool)
+    def wrapped(*args, **kwargs):
+        return _native_tool_result(tool(*args, **kwargs))
+    return wrapped
+
+
+# Apply the same public output contract to every tool defined in this module.
+for _tool_name, _tool_function in list(globals().items()):
+    if (not _tool_name.startswith('_') and callable(_tool_function)
+            and getattr(_tool_function, '__module__', None) == __name__):
+        globals()[_tool_name] = _wrap_tool_result(_tool_function)

@@ -10,6 +10,7 @@ logger.setLevel(logging.INFO)
 from sack.Agents.agent_base import Agent
 from sack.utils import read_file
 from sack.state import State
+from sack.runtime_support import ReplyFormatError, normalize_review, parse_json_object
 from sack.Prompts.prompt_base import *
 from sack.Prompts.prompt_reviewer import *
 
@@ -25,54 +26,51 @@ class Reviewer(Agent):
     def _merge_dicts(self, dicts: List[Dict[str, Any]], state: State) -> Dict[str, Any]:
         merged_dict = {"final_suggestion": {}, "final_score": {}}
 
-        # define the keys to be unified
-        if state.phase == 'Understand Background': # 背景理解的前驱agent只有reader
-            key_mapping = {
-                "reader": "agent reader"
-            }
-        else: # 其他情况的前驱是planner和developer
-            key_mapping = {
-                "planner": "agent planner",
-                "developer": "agent developer"
-            }
-        
-        try:
-            for d in dicts: # 对每个agent的json text （包含final_score和final_suggestion两个字段）  把不同agent的score、suggestion分别整合到一块  也就是一个dict的score、suggestion字段包含所有agent的score、suggestion
-                if not isinstance(d, dict):
-                    continue
-                suggestions = d.get("final_suggestion") or d.get("suggestion") or {}
-                scores = d.get("final_score") or d.get("score") or {}
-                if not isinstance(suggestions, dict):
-                    suggestions = {}
-                if not isinstance(scores, dict):
-                    scores = {}
-                for key in suggestions: # 找到当前agent的suggestion
-                    normalized_key = key.lower()
-                    for k, v in key_mapping.items():
-                        if k in normalized_key:
-                            normalized_key = v  # 当前agent匹配到目标命名
-                            break
-                    merged_dict["final_suggestion"][normalized_key] = suggestions[key]
-                for key in scores:
-                    normalized_key = key.lower()
-                    for k, v in key_mapping.items():
-                        if k in normalized_key:
-                            normalized_key = v
-                            break
-                    merged_dict["final_score"][normalized_key] = scores[key]
-        except Exception as e:
-            logging.error(f"Error: {e}")
-            # pdb.set_trace()
-
-        expected_agents = list(key_mapping.values())
-        for agent_name in expected_agents:
-            merged_dict["final_score"].setdefault(agent_name, 0)
-            merged_dict["final_suggestion"].setdefault(
-                agent_name,
-                "Reviewer output could not be parsed into the expected schema. Please regenerate this stage."
-            )
+        for reply in dicts:
+            normalized = normalize_review(reply)
+            for field in merged_dict:
+                for role, value in normalized[field].items():
+                    if role in merged_dict[field] and merged_dict[field][role] != value:
+                        raise ReplyFormatError(f"Conflicting reviewer values for {role}")
+                    merged_dict[field][role] = value
+        expected = ['reader'] if state.phase == 'Understand Background' else ['planner', 'developer']
+        for role in expected:
+            if 'agent ' + role not in merged_dict['final_score']:
+                raise ReplyFormatError(f"Missing reviewer score for agent {role}")
         
         return merged_dict # 合并所有 Agent 信息后的字典。
+
+    def _parse_review_replies(self, raw_replies, state):
+        roles = list(state.memory[-1])
+        if len(roles) != len(raw_replies):
+            raise ReplyFormatError("Reviewer reply count does not match evaluated agents")
+        parsed, trace = [], []
+        path = f'{state.restore_dir}/reviewer_parse_attempts.json'
+        for role, original in zip(roles, raw_replies):
+            raw = original
+            for attempt in range(2):
+                record = {"agent": role, "attempt": attempt + 1, "raw": raw}
+                trace.append(record)
+                try:
+                    reply = normalize_review(parse_json_object(raw), role)
+                    record['parsed'] = reply
+                    parsed.append(reply)
+                    break
+                except ReplyFormatError as exc:
+                    record['error'] = str(exc)
+                    if attempt == 1:
+                        raise ReplyFormatError(f"Invalid reviewer reply for {role}: {exc}") from exc
+                    prompt = (
+                        f"Reformat this review for agent {role} into one JSON object. "
+                        "Preserve the original evaluation and score. Use final_score and "
+                        f"final_suggestion objects keyed by 'agent {role}'. "
+                        "Do not invent a missing score. Return JSON only.\n" + original
+                    )
+                    raw, _ = self.llm.generate(prompt, history=[], max_completion_tokens=4096)
+                finally:
+                    with open(path, 'w', encoding='utf-8') as output:
+                        json.dump(trace, output, ensure_ascii=False, indent=2)
+        return parsed
 
     def _generate_prompt_for_agents(self, state: State) -> List[str]:
         prompt_for_agents = []
@@ -110,22 +108,13 @@ class Reviewer(Agent):
             all_raw_reply.append(raw_reply)
 
 
-        all_reply = []
-        # pdb.set_trace()
-        for each_raw_reply in all_raw_reply:
-            reply = self._parse_json(each_raw_reply)
-            try:
-                all_reply.append(reply['final_answer']) # json text
-            except KeyError:
-                # pdb.set_trace()
-                all_reply.append(reply)
-
         # save history
         with open(f'{state.restore_dir}/{self.role}_history.json', 'w', encoding='utf-8') as f:
             json.dump(history, f,ensure_ascii=False, indent=4)
         with open(f'{state.restore_dir}/{self.role}_reply.txt', 'w',encoding="utf-8") as f:
             f.write("\n\n\n".join(all_raw_reply))
 
+        all_reply = self._parse_review_replies(all_raw_reply, state)
         review = self._merge_dicts(all_reply, state)  # 多个agent的suggestion、score合并
         final_score = review['final_score']
         final_suggestion = review['final_suggestion']
@@ -145,4 +134,3 @@ class Reviewer(Agent):
                 "result": review
             }
         }
-

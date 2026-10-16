@@ -1,0 +1,50 @@
+{
+  "backend": "graphdb",
+  "checks": {
+    "rawdata_unchanged": true,
+    "eda_status_success": true,
+    "pre_insight_extraction": {
+      "unknowns": 0,
+      "required_fields_and_tools_complete": true
+    },
+    "deep_insight_extraction": {
+      "unknowns": 0,
+      "required_fields_and_tools_complete": true
+    }
+  },
+  "errors": [
+    {
+      "check": "exit_success_and_not_stopped",
+      "error": "exit_success_and_not_stopped"
+    },
+    {
+      "check": "dsp_completion_logged",
+      "error": "dsp_completion_logged"
+    },
+    {
+      "check": "cleaned_train.csv",
+      "error": "[Errno 2] No such file or directory: '/opt/sack-backend-compare-20261002-fix6/graphdb/repo/data/competitions/titanic/cleaned_train.csv'"
+    },
+    {
+      "check": "cleaned_test.csv",
+      "error": "[Errno 2] No such file or directory: '/opt/sack-backend-compare-20261002-fix6/graphdb/repo/data/competitions/titanic/cleaned_test.csv'"
+    },
+    {
+      "check": "processed_train.csv",
+      "error": "[Errno 2] No such file or directory: '/opt/sack-backend-compare-20261002-fix6/graphdb/repo/data/competitions/titanic/processed_train.csv'"
+    },
+    {
+      "check": "processed_test.csv",
+      "error": "[Errno 2] No such file or directory: '/opt/sack-backend-compare-20261002-fix6/graphdb/repo/data/competitions/titanic/processed_test.csv'"
+    },
+    {
+      "check": "profile",
+      "error": "[Errno 2] No such file or directory: '/opt/sack-backend-compare-20261002-fix6/graphdb/repo/data/competitions/titanic/titanic_profile.json'"
+    },
+    {
+      "check": "predictions",
+      "error": "[Errno 2] No such file or directory: '/opt/sack-backend-compare-20261002-fix6/graphdb/repo/data/competitions/titanic/submission.csv'"
+    }
+  ],
+  "accepted": false
+}

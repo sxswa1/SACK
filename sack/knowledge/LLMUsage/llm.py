@@ -3,6 +3,7 @@ import tiktoken
 from openai import OpenAI
 from typing import Tuple
 
+from sack.model_config import get_model
 from sack.api_handler import APIHandler
 from sack.utils import multi_chat
 
@@ -10,7 +11,7 @@ from sack.utils import multi_chat
 class LLM:
     def __init__(self, model: str, type: str):
         if type == 'api':
-            self.api_handler = APIHandler(model)
+            self.api_handler = APIHandler(model, endpoint_role="general")
         elif type == 'local':
             pass
 
@@ -19,9 +20,9 @@ class LLM:
 
 
 class OpenaiEmbeddings:
-    def __init__(self, api_key: str, base_url: str = None, model: str = 'Qwen3-Embedding-0.6B'):
+    def __init__(self, api_key: str, base_url: str = None, model: str | None = None):
         self.client = OpenAI(api_key=api_key, base_url=base_url, http_client=httpx.Client(verify=False))
-        self.model = model
+        self.model = model if model is not None else get_model("knowledge_embedding")
 
     def num_tokens_from_string(string: str, encoding_name: str = 'cl100k_base') -> int:
         '''

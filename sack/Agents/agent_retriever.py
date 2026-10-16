@@ -12,6 +12,7 @@ from sack.paths import (
     PROJECT_ROOT,
     ensure_project_imports,
 )
+from sack.model_config import get_model
 from sack.LLMComponent.llm import OpenaiEmbeddings, LLM
 from sack.state import State
 
@@ -53,7 +54,7 @@ class SACKCaseRetriever():
             print(f"SACKKnowledgeBase initialization failed: {e}")
             raise
 
-        self.llm = LLM(model = "qwen-plus", type="api")
+        self.llm = LLM(model=get_model("retriever"), type="api", endpoint_role="general")
         self.last_retrieval_error: Optional[str] = None
 
     # TODO: 直接在提取核心见解的时候就用对应的名字，可以避免映射
@@ -135,6 +136,7 @@ class SACKCaseRetriever():
                 current_comp_profile = self.sack_knowledge.generate_competition_profile(
                     comp_id=competition,
                     persist_path=current_comp_path,
+                    source_path=current_comp_path,
                 )
     
     

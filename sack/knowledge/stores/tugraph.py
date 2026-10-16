@@ -210,7 +210,7 @@ MATCH (c:Column)-[:IS_PART_OF]->(t:Table)-[:IS_PART_OF]->(d:Dataset {uid: $datas
 WHERE t.name IS NOT NULL
   AND c.name IS NOT NULL
   AND c.data_type IS NOT NULL
-RETURN t.uid AS table_uid,
+RETURN DISTINCT t.uid AS table_uid,
        t.uri AS table_uri,
        t.name AS table_name,
        c.uid AS column_uid,

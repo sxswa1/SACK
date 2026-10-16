@@ -6,6 +6,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+from sack.model_config import get_model
 from sack.paths import SACK_CONFIG_PATH
 from sack.utils import load_config
 from sack.Agents import Reader, Planner, Developer, Reviewer, Summarizer
@@ -37,27 +38,27 @@ class SOP:
 
     def _create_agent(self, agent_name: str):
         if "Reader" in agent_name:
-            agent = Reader("qwen-plus", 'api')
+            agent = Reader(get_model("reader"), 'api')
         elif "Planner" in agent_name:
             if agent_name == "EDAPlanner":
-                agent = EDAPlanner("qwen-plus", 'api')
+                agent = EDAPlanner(get_model("planner"), 'api')
             else:
-                agent = Planner("qwen-plus", 'api')
+                agent = Planner(get_model("planner"), 'api')
         elif "Developer" in agent_name:
             if agent_name == "EDADeveloper":
-                agent = EDADeveloper("qwen3-coder-plus", 'api')
+                agent = EDADeveloper(get_model("developer"), 'api')
             else:
-                agent = Developer("qwen3-coder-plus", 'api')
+                agent = Developer(get_model("developer"), 'api')
         elif "Reviewer" in agent_name:
             if agent_name == "EDAReviewer":
-                agent = EDAReviewer("qwen-plus", 'api')
+                agent = EDAReviewer(get_model("reviewer"), 'api')
             else:
-                agent = Reviewer("qwen-plus", 'api')
+                agent = Reviewer(get_model("reviewer"), 'api')
         elif "Summarizer" in agent_name:
             if agent_name == "EDASummarizer":
-                agent = EDASummarizer("qwen-plus", 'api')
+                agent = EDASummarizer(get_model("summarizer"), 'api')
             else:
-                agent = Summarizer("qwen-plus", 'api')
+                agent = Summarizer(get_model("summarizer"), 'api')
         else:
             return None
         return agent
@@ -102,7 +103,7 @@ class SOP:
         elif state.score >= 3:
             return "Complete", None  # 最后一个阶段结束了
         else:
-            return "Fail", None
+            return "Fail", state
 
     def _update_other_state(self, state: State) -> Tuple[str, Optional[State]]:  # 其他阶段的迁移判断
         if state.phase == "Feature Engineering":
@@ -120,7 +121,7 @@ class SOP:
                 next_phase = self.get_next_phase(state.phase)
                 return "Success", State(phase=next_phase, competition=self.competition, use_mode=self.config['use_mode'])
         else:
-            return "Fail", None
+            return "Fail", state
 
     def _create_repeat_state(self, state: State) -> State:  # 重复当前阶段，阶段还是这个阶段但state已经是新一轮的state了
         new_state = State(phase=state.phase, competition=self.competition, use_mode=self.config['use_mode'])

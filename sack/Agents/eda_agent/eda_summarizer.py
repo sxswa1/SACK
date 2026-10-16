@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 from sack.Agents.agent_summarizer import Summarizer
 from sack.state import State
+from sack.runtime_support import ReplyFormatError, missing_insight_fields, parse_json_object
 from sack.Prompts.prompt_summarizer import *
 from sack.Prompts.eda_prompt.prompt_summarizer import PROMPT_EDAINSIGHT_POPULATION_WITH_TOOLS
 from sack.EDAInsightPrompts.edainsight_template import EDAInsightTemplate
@@ -59,6 +60,12 @@ class EDASummarizer(Summarizer):
                 "detect_conditional_dependencies": "feature_relationships.interaction_patterns.conditional_dependencies",
                 "detect_nonlinear_relationships": "feature_relationships.interaction_patterns.nonlinear_relationships",
                 "assess_dataset_complexity": "complexity",
+                "calculate_samples_per_feature": "complexity.dimensionality.samples_per_feature",
+                "estimate_feature_interaction_potential": "complexity.dimensionality.feature_interaction_potential",
+                "analyze_sparsity": ["complexity.sparsity_patterns.zero_dominated_ratio",
+                                    "complexity.sparsity_patterns.sparse_columns_ratio"],
+                "estimate_signal_to_noise": "complexity.noise_level.signal_to_noise_estimate",
+                "estimate_inherent_uncertainty": "complexity.noise_level.inherent_uncertainty",
                 "analyze_time_series_properties": "special_scenarios.temporal_properties",
                 "estimate_causal_confounder_strength": "special_scenarios.causal_properties",
                 "analyze_spatial_correlation": "special_scenarios.spatial_properties",
@@ -305,20 +312,14 @@ class EDASummarizer(Summarizer):
     def _extract_clean_eda_insight(self, raw_response: str, template: Dict) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """Populate EDAInsight fields."""
         try:
-            response_with_evidence = json.loads(raw_response)
+            response_with_evidence = parse_json_object(raw_response)
             clean_insight = self._remove_evidence_fields(response_with_evidence, template)
             return response_with_evidence, clean_insight
-        except json.JSONDecodeError:
-            json_match = re.search(r'\{.*\}', raw_response, re.DOTALL)
-            if json_match:
-                try:
-                    response_with_evidence = json.loads(json_match.group())
-                    clean_insight = self._remove_evidence_fields(response_with_evidence, template)
-                    return response_with_evidence, clean_insight
-                except json.JSONDecodeError:
-                    pass
-            logger.error("Failed to parse EDAInsight JSON from model response")
-            logger.error(f"Raw response preview: {raw_response[:500]}...")
+        except ReplyFormatError as exc:
+            logger.error("Failed to parse EDAInsight JSON: %s", exc)
+            logger.error("Raw response preview: %s", raw_response[:500])
+            # Validation rejects the unknown template; do not accept a list or
+            # silently merge multiple JSON objects into one insight.
             return template, template
 
     def _remove_evidence_fields(self, data: Any, template: Any) -> Any:
@@ -425,6 +426,7 @@ class EDASummarizer(Summarizer):
             populated_insight = template
         # 验证质量（基于工具输出）
         validation_result = self._validate_eda_insight(state, populated_insight, eda_info)
+        validation_result['missing_schema_fields'] = missing_insight_fields(template, populated_insight)
         # 保存结果
         self._save_eda_insight_results(state, populated_insight_with_evidence, populated_insight, validation_result)
         return populated_insight
@@ -436,10 +438,32 @@ class EDASummarizer(Summarizer):
 
         # EDAInsight濉厖
         eda_insight = self._populate_eda_insight(state)
+        with open(f'{state.restore_dir}/eda_insight_validation.json', encoding='utf-8') as output:
+            validation = json.load(output)
+        missing_tools = validation.get('tool_output_validation', {}).get('missing_tool_outputs', [])
+        quality_valid = not (validation.get('unknown_fields_count', 0) or
+                             validation.get('missing_schema_fields') or missing_tools)
+        if not quality_valid:
+            template_key = 'pre_eda' if state.phase == 'PEDA Insight Extraction' else 'deep_eda'
+            required_tools = set(missing_tools)
+            for tool, paths in self.tool_field_mapping.get(template_key, {}).items():
+                paths = [paths] if isinstance(paths, str) else paths
+                if any(field == path or field.startswith(path + '.')
+                       for field in validation.get('missing_schema_fields', [])
+                       for path in paths):
+                    required_tools.add(tool)
+            advice = ('EDA insight is incomplete. Generate and print the required tool outputs. '
+                      f'Tools needed for missing or partial results: {sorted(required_tools)}; missing fields: '
+                      f"{validation.get('missing_schema_fields', [])}; "
+                      f"unknown fields: {validation.get('unknown_fields_count', 0)}")
+            suggestions = state.memory[-1].get('reviewer', {}).setdefault('suggestion', {})
+            for role in ('agent planner', 'agent developer'):
+                suggestions[role] = suggestions.get(role, '') + '\n' + advice
 
         result = {
             self.role: {
-                "eda_insight": eda_insight
+                "eda_insight": eda_insight,
+                "quality_valid": quality_valid,
             }
         }
         return result

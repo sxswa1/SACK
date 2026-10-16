@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 from sack.LLMComponent.llm import OpenaiEmbeddings, LLM
+from sack.model_config import get_model
 from sack.state import State
 from sack.utils import load_config
 from sack.Prompts.prompt_developer import *
@@ -15,10 +16,10 @@ from sack.Prompts.prompt_developer import *
 class DebugTool: # 调试工具
     def __init__(
         self,
-        model: str = 'qwen3-coder-plus',
+        model: str | None = None,
         type: str = 'api'       
     ):
-        self.llm = LLM(model, type)
+        self.llm = LLM(model if model is not None else get_model("debug"), type, endpoint_role="coder")
 
     # 带着代码运行错误来调试，让llm根据错误信息定位错误段
     def debug_code_with_error(self, state: State, all_error_messages: list, output_messages: str, previous_code: str, wrong_code: str, error_messages: str, tools: str, tool_names: list) -> str:
@@ -77,6 +78,12 @@ class DebugTool: # 调试工具
 
         # extract code 从回答中提取代码段
         correct_code_matches = re.findall(pattern, fix_reply, re.DOTALL)
+        correct_code_matches = [code for code in correct_code_matches if code.strip()]
+        if not correct_code_matches:
+            logger.warning("Debug reply contains no corrected Python code; request regeneration.")
+            with open(f'{state.restore_dir}/single_round_debug_history.json', 'w', encoding='utf-8') as f:
+                json.dump(single_round_debug_history, f, ensure_ascii=False, indent=4)
+            return "HELP", single_round_debug_history
         code_snippet_after_correction = correct_code_matches[-1]
 
         # 合并代码：用修正后的代码块替换原代码中出错的位置。

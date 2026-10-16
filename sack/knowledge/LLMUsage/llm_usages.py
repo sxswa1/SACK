@@ -1,4 +1,5 @@
 ﻿from typing import List, Dict, Any, Tuple
+from sack.model_config import get_model
 from sack.knowledge.LLMUsage.llm import LLM
 from sack.knowledge.LLMUsage.utils import parse_json_from_response
 import logging
@@ -80,7 +81,7 @@ OUTPUT:
 
     try:
         # 使用您的LLM类生成响应
-        llm = LLM(model="qwen-plus", type="api")  # 根据您的实际模型名称调整
+        llm = LLM(model=get_model("knowledge"), type="api")  # 根据您的实际模型名称调整
         history = []  # 空历史
         response_text, _ = llm.generate(prompt, history, max_completion_tokens=5000)
 
@@ -277,7 +278,7 @@ def analyze_node_phases(nodes: List[Dict], full_code: str) -> Tuple[Dict[str, An
     logging.info(f"Nodes split into {len(node_groups)} groups (each max {group_size} nodes)")
 
     # 2. 拆分节点为每组100个
-    llm = LLM(model="qwen-plus", type="api")
+    llm = LLM(model=get_model("knowledge"), type="api")
     all_assignments = []  # 存储所有分组的标注结果。
     keep_last_n = 5
 
@@ -438,7 +439,7 @@ def summarize_pipeline_structure(full_code: str,task1_simplified_history: List) 
         "    }\n"
         "}\n"
     )
-    llm = LLM(model="qwen-plus", type="api")
+    llm = LLM(model=get_model("knowledge"), type="api")
     max_retries = 3
 
     for attempt in range(max_retries):
@@ -461,7 +462,7 @@ def summarize_pipeline_structure(full_code: str,task1_simplified_history: List) 
 
 def core_insight_extraction(full_code: str, pipeline_structure_result: Dict, compressed_assignments: Dict[str, List]) -> Dict:
 
-    llm = LLM(model="qwen-plus", type="api")
+    llm = LLM(model=get_model("knowledge"), type="api")
 
     pipeline_structure = pipeline_structure_result.get("pipeline_structure", {})
 

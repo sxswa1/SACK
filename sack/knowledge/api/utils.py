@@ -1,4 +1,5 @@
 import os
+import hashlib
 
 from typing import Tuple,List,Dict,Any
 
@@ -44,24 +45,27 @@ def _find_competition_file(comp_path: str, filename: str) -> str | None:
 
 
 def _list_competition_csv_files(comp_path: str) -> List[str]:
-    preferred_dirs = [
-        comp_path,
-        os.path.join(comp_path, 'rawdata'),
-        os.path.join(comp_path, 'raw_data'),
-        os.path.join(comp_path, 'data'),
-    ]
-    for candidate_dir in preferred_dirs:
-        if not os.path.isdir(candidate_dir):
-            continue
-        csv_files = [
-            os.path.join(candidate_dir, name)
-            for name in os.listdir(candidate_dir)
-            if name.lower().endswith('.csv')
-        ]
-        csv_files = [path for path in csv_files if os.path.isfile(path) and os.path.getsize(path) > 0]
-        if csv_files:
-            return sorted(csv_files)
-    return []
+    # A dataset snapshot consists of train/test, never submission or derived tables.
+    for directory in (comp_path, os.path.join(comp_path, 'rawdata'),
+                      os.path.join(comp_path, 'raw_data'), os.path.join(comp_path, 'data')):
+        files = [os.path.join(directory, name) for name in ('train.csv', 'test.csv')]
+        if all(os.path.isfile(path) and os.path.getsize(path) > 0 for path in files):
+            return files
+    raise ValueError(f"Profile requires non-empty train.csv and test.csv in {comp_path}")
+
+
+def profile_input_manifest(comp_path: str) -> Dict[str, str]:
+    manifest = {}
+    inputs = _list_competition_csv_files(comp_path)
+    for name in ('overview.txt', 'data_description.txt'):
+        path = _find_competition_file(comp_path, name)
+        if path:
+            inputs.append(path)
+    for path in inputs:
+        with open(path, 'rb') as source:
+            manifest[os.path.basename(path)] = hashlib.sha256(source.read()).hexdigest()
+    return manifest
+
 
 def profile_single_competition(new_comp_path: str) -> Tuple[dict, List[dict]]: # 新竞赛的本地路径（如"/data/new_competition"）
 
@@ -219,7 +223,8 @@ def profile_single_competition(new_comp_path: str) -> Tuple[dict, List[dict]]: #
 
     # --------------------------
 
-    table_profiles = []  # 存储所有表的信息：[{table_name: ..., columns: [...]}, ...]
+    table_profiles = []
+    failures = []
 
     fasttext_column_model = fasttext.load_model(os.path.join(SACKKnowledgeConfig.base_dir, 'embeddings/cc.en.50.bin'))
 
@@ -251,11 +256,9 @@ def profile_single_competition(new_comp_path: str) -> Tuple[dict, List[dict]]: #
 
                 header = pd.read_csv(csv_file, nrows=0, engine='python', encoding_errors='replace')
 
-            except:
+            except Exception as exc:
 
-                continue
-
-
+                raise RuntimeError(f"Cannot read profile input {csv_file}: {exc}") from exc
 
             for col_name in header.columns:
 
@@ -337,9 +340,10 @@ def profile_single_competition(new_comp_path: str) -> Tuple[dict, List[dict]]: #
 
                 except Exception as e:
 
+                    failures.append({"table": table_name, "column": str(col_name),
+                                     "error_type": type(e).__name__, "error": str(e)})
                     print(e)
-
-                    print(f"Warning: 跳过无法处理的列 {col_name}（文件：{csv_file}）")
+                    print(f"Profile column failed: {col_name} ({csv_file})")
 
                     import traceback
 
@@ -355,13 +359,19 @@ def profile_single_competition(new_comp_path: str) -> Tuple[dict, List[dict]]: #
 
                 "table_name": table_name,
 
+                "expected_columns": [str(name) for name in header.columns],
                 "columns": current_table_columns
 
             })
 
 
 
-    return competition_profile, table_profiles  # 返回按表分组的列表
+    if failures:
+        error_path = os.path.join(new_comp_path, 'profile_errors.json')
+        with open(error_path, 'w', encoding='utf-8') as output:
+            json.dump(failures, output, ensure_ascii=False, indent=2)
+        raise RuntimeError(f"Profile incomplete: {len(failures)} column failures; see {error_path}")
+    return competition_profile, table_profiles
 
 
 

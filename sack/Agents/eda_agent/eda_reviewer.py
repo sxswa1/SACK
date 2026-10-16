@@ -89,20 +89,13 @@ class EDAReviewer(Reviewer):
             all_raw_reply.append(raw_reply)
 
         # 其余逻辑保持不变
-        all_reply = []
-        for each_raw_reply in all_raw_reply:
-            reply = self._parse_json(each_raw_reply)
-            try:
-                all_reply.append(reply['final_answer'])
-            except KeyError:
-                all_reply.append(reply)
-
         # 保存历史
         with open(f'{state.restore_dir}/{self.role}_history.json', 'w', encoding='utf-8') as f:
             json.dump(history, f, ensure_ascii=False, indent=4)
         with open(f'{state.restore_dir}/{self.role}_reply.txt', 'w', encoding="utf-8") as f:
             f.write("\n\n\n".join(all_raw_reply))
 
+        all_reply = self._parse_review_replies(all_raw_reply, state)
         review = self._merge_dicts(all_reply, state)
         final_score = review['final_score']
         final_suggestion = review['final_suggestion']

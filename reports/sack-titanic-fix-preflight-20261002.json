@@ -1,0 +1,281 @@
+{
+  "server_workspaces": "/opt/sack-backend-compare-20261004-fix12",
+  "source_manifest_sha256": "c79efd84db2061d7ffcf312837e562c2f5345bee651c0b2f83a86cc4c8a54d96",
+  "scope": "Read-only retrieval and actual profile models; real output, IQR, CSV, JSON, polynomial and conditional replay. Not full workflow acceptance.",
+  "backends": {
+    "graphdb": {
+      "errors": {},
+      "paid_api_called": false,
+      "no_sparql_fallback_guard": false,
+      "checks": [
+        "fresh_raw_profile",
+        "pipelines",
+        "insights",
+        "code",
+        "pre_eda",
+        "pre_eda_core",
+        "tables",
+        "fusion_retrieval"
+      ],
+      "immutable_source_files_verified": 262,
+      "runtime_state_file_excluded": "sack/competition_process_status.json (initialized fail by prepare.py, then updated by workflow)",
+      "input_manifest": {
+        "overview.txt": "0bebd0c2c312335524fda9d2c73158604f89b83b536856e79dbb458c8bd24ace",
+        "test.csv": "5c78320a80dc159b35c408363be46a5d93f078183d539db75ee42a796d6a4e95",
+        "train.csv": "4a437fde05fe5264e1701a7387ac6fb75393772ba38bb2c9c566405af5af4bd7"
+      },
+      "tables": {
+        "train.csv": {
+          "expected": 12,
+          "profiled": 12,
+          "all_column_vectors_300_finite": true
+        },
+        "test.csv": {
+          "expected": 11,
+          "profiled": 11,
+          "all_column_vectors_300_finite": true
+        }
+      },
+      "csv_preview": {
+        "passed": true,
+        "source_csv_text_and_record_boundaries_preserved": true,
+        "paid_model_calls": 0
+      },
+      "eda_json": {
+        "passed": true,
+        "actual_tool_import": true,
+        "numpy_scalar_native_json": true,
+        "paid_api_called": false
+      },
+      "polynomial": {
+        "passed": true,
+        "actual_ml_tools_import": true,
+        "previous_failed_cleaned_rows": 891,
+        "unique_polynomial_columns": true,
+        "subsequent_scaling_succeeded": true,
+        "paid_api_called": false
+      },
+      "conditional": {
+        "passed": true,
+        "actual_tool_import": true,
+        "source": "/opt/sack-backend-compare-20261003-fix9/graphdb/repo/data/eda_competitions/titanic/cleaned_train.csv",
+        "rows": 891,
+        "result": {
+          "has_conditional_dependencies": false,
+          "conditional_dependency_strength": 0.2047
+        },
+        "paid_api_called": false
+      },
+      "output_boundaries": {
+        "passed": true,
+        "paid_api_called": false,
+        "actual_ml_tool_import": true,
+        "raw_titanic_rows": 891,
+        "fractional_upper_bound": 2.5,
+        "integer_dtype_retained_when_no_fractional_replacement": true,
+        "actual_harness_methods": true,
+        "failed_run_replayed": "/opt/sack-backend-compare-20261003-fix10/graphdb/repo/data/competitions/titanic/processed_test.csv",
+        "validation_failed_without_crashing": true,
+        "failure_feedback": "test_processed_test_no_duplicated_features: EmptyDataError: No columns to parse from file. Repair the generated output and rerun this test.",
+        "remaining_validation_executed": true,
+        "complexity_tool_mapping_complete": true
+      },
+      "artifact_validation": {
+        "passed": true,
+        "paid_api_called": false,
+        "actual_production_methods": true,
+        "failed_run_replayed": "/opt/sack-backend-compare-20261004-fix11/tugraph/repo/data/competitions/titanic",
+        "valid_single_class_labels_not_rejected_by_sample_mean": true,
+        "submission_read_only_sha256": "2d3b62b8d4012a9bf314b417ed15fa5f7c560f0a4c94ecfdb3594d1b3a853672",
+        "no_predictor_train_and_test_rejected": true,
+        "feature_feedback": {
+          "test_processed_train_feature_number": [
+            false,
+            15,
+            "No predictor columns remain after feature selection. Preserve at least one real predictor, excluding IDs and targets. Feature selection tools return feature names in the 'feature' column; their output column names are not the selected predictors."
+          ],
+          "test_processed_test_feature_number": [
+            false,
+            16,
+            "No predictor columns remain after feature selection. Preserve at least one real predictor, excluding IDs and targets. Feature selection tools return feature names in the 'feature' column; their output column names are not the selected predictors."
+          ]
+        },
+        "submission_feedback": [
+          true,
+          29,
+          "submission.csv has valid schema, IDs and prediction values."
+        ]
+      }
+    },
+    "tugraph": {
+      "errors": {},
+      "paid_api_called": false,
+      "no_sparql_fallback_guard": true,
+      "checks": [
+        "fresh_raw_profile",
+        "pipelines",
+        "insights",
+        "code",
+        "pre_eda",
+        "pre_eda_core",
+        "tables",
+        "fusion_retrieval"
+      ],
+      "immutable_source_files_verified": 262,
+      "runtime_state_file_excluded": "sack/competition_process_status.json (initialized fail by prepare.py, then updated by workflow)",
+      "input_manifest": {
+        "overview.txt": "0bebd0c2c312335524fda9d2c73158604f89b83b536856e79dbb458c8bd24ace",
+        "test.csv": "5c78320a80dc159b35c408363be46a5d93f078183d539db75ee42a796d6a4e95",
+        "train.csv": "4a437fde05fe5264e1701a7387ac6fb75393772ba38bb2c9c566405af5af4bd7"
+      },
+      "tables": {
+        "train.csv": {
+          "expected": 12,
+          "profiled": 12,
+          "all_column_vectors_300_finite": true
+        },
+        "test.csv": {
+          "expected": 11,
+          "profiled": 11,
+          "all_column_vectors_300_finite": true
+        }
+      },
+      "csv_preview": {
+        "passed": true,
+        "source_csv_text_and_record_boundaries_preserved": true,
+        "paid_model_calls": 0
+      },
+      "eda_json": {
+        "passed": true,
+        "actual_tool_import": true,
+        "numpy_scalar_native_json": true,
+        "paid_api_called": false
+      },
+      "polynomial": {
+        "passed": true,
+        "actual_ml_tools_import": true,
+        "previous_failed_cleaned_rows": 891,
+        "unique_polynomial_columns": true,
+        "subsequent_scaling_succeeded": true,
+        "paid_api_called": false
+      },
+      "conditional": {
+        "passed": true,
+        "actual_tool_import": true,
+        "source": "/opt/sack-backend-compare-20261003-fix9/graphdb/repo/data/eda_competitions/titanic/cleaned_train.csv",
+        "rows": 891,
+        "result": {
+          "has_conditional_dependencies": true,
+          "conditional_dependency_strength": 0.3064
+        },
+        "paid_api_called": false
+      },
+      "output_boundaries": {
+        "passed": true,
+        "paid_api_called": false,
+        "actual_ml_tool_import": true,
+        "raw_titanic_rows": 891,
+        "fractional_upper_bound": 2.5,
+        "integer_dtype_retained_when_no_fractional_replacement": true,
+        "actual_harness_methods": true,
+        "failed_run_replayed": "/opt/sack-backend-compare-20261003-fix10/graphdb/repo/data/competitions/titanic/processed_test.csv",
+        "validation_failed_without_crashing": true,
+        "failure_feedback": "test_processed_test_no_duplicated_features: EmptyDataError: No columns to parse from file. Repair the generated output and rerun this test.",
+        "remaining_validation_executed": true,
+        "complexity_tool_mapping_complete": true
+      },
+      "artifact_validation": {
+        "passed": true,
+        "paid_api_called": false,
+        "actual_production_methods": true,
+        "failed_run_replayed": "/opt/sack-backend-compare-20261004-fix11/tugraph/repo/data/competitions/titanic",
+        "valid_single_class_labels_not_rejected_by_sample_mean": true,
+        "submission_read_only_sha256": "2d3b62b8d4012a9bf314b417ed15fa5f7c560f0a4c94ecfdb3594d1b3a853672",
+        "no_predictor_train_and_test_rejected": true,
+        "feature_feedback": {
+          "test_processed_train_feature_number": [
+            false,
+            15,
+            "No predictor columns remain after feature selection. Preserve at least one real predictor, excluding IDs and targets. Feature selection tools return feature names in the 'feature' column; their output column names are not the selected predictors."
+          ],
+          "test_processed_test_feature_number": [
+            false,
+            16,
+            "No predictor columns remain after feature selection. Preserve at least one real predictor, excluding IDs and targets. Feature selection tools return feature names in the 'feature' column; their output column names are not the selected predictors."
+          ]
+        },
+        "submission_feedback": [
+          true,
+          29,
+          "submission.csv has valid schema, IDs and prediction values."
+        ]
+      }
+    }
+  },
+  "query_comparison": {
+    "scope": "Historical real-data domain queries and local-model fusion; not Titanic full pipeline",
+    "graphdb_errors": {},
+    "tugraph_errors": {},
+    "checks": {
+      "code": {
+        "equal": true,
+        "semantic_equal": true,
+        "graphdb_sha256": "8cd1ea0cc7411aec2a75603c03a2024c1dc4a4d4d1417d525780e177919a40a4",
+        "tugraph_sha256": "8cd1ea0cc7411aec2a75603c03a2024c1dc4a4d4d1417d525780e177919a40a4"
+      },
+      "fresh_raw_profile": {
+        "equal": false,
+        "semantic_equal": false,
+        "graphdb_sha256": "4bef6d40387af31773650b88b8ae9ce3477982f32632b927c69751133c5f8774",
+        "tugraph_sha256": "6b0b1591cde42ed5715cfb43bea8a842bb9d561404c618972a3c39036189e591"
+      },
+      "fusion_retrieval": {
+        "equal": true,
+        "semantic_equal": true,
+        "graphdb_sha256": "e3bd6325c7b50f3560906ae84b253cd82b0405fdf2a13040fc03e5adcc5e8b4b",
+        "tugraph_sha256": "e3bd6325c7b50f3560906ae84b253cd82b0405fdf2a13040fc03e5adcc5e8b4b"
+      },
+      "insights": {
+        "equal": false,
+        "semantic_equal": true,
+        "graphdb_sha256": "05bbb699e329f8d6ea1748a03f4e50057bd78f323e96df34223a780aca169cf5",
+        "tugraph_sha256": "b043f318f6b0638178d2d798d7bcd0c6383e26f033f51f3f27aaf45576430ac8"
+      },
+      "pipelines": {
+        "equal": false,
+        "semantic_equal": true,
+        "graphdb_sha256": "5193d417e1782346f052ca8ef5ad2643ed4bfc4c2539d37628b68b2a9ba9f942",
+        "tugraph_sha256": "06371f40a75ca6dac9437b855dba7984d83c30d9feaab15c9de75d63a9d72015"
+      },
+      "pre_eda": {
+        "equal": true,
+        "semantic_equal": true,
+        "graphdb_sha256": "c6251398cf3ac15e07693cfd51dcf7a9fa9e7500697f0ebc45038c99a8e5d737",
+        "tugraph_sha256": "c6251398cf3ac15e07693cfd51dcf7a9fa9e7500697f0ebc45038c99a8e5d737"
+      },
+      "pre_eda_core": {
+        "equal": true,
+        "semantic_equal": true,
+        "graphdb_sha256": "c6251398cf3ac15e07693cfd51dcf7a9fa9e7500697f0ebc45038c99a8e5d737",
+        "tugraph_sha256": "c6251398cf3ac15e07693cfd51dcf7a9fa9e7500697f0ebc45038c99a8e5d737"
+      },
+      "tables": {
+        "equal": true,
+        "semantic_equal": true,
+        "graphdb_sha256": "91b25dba0d7c75f44544131bcefca03582d667d4dd639bfffa79d6fecf3c46b8",
+        "tugraph_sha256": "91b25dba0d7c75f44544131bcefca03582d667d4dd639bfffa79d6fecf3c46b8"
+      }
+    },
+    "tugraph_no_sparql_fallback": true,
+    "all_exactly_equal": false
+  },
+  "graphdb_started_at": "2026-10-04T12:29:43.923697+00:00",
+  "tugraph_started": true,
+  "full_workflow_runtime_limit_seconds": 21600,
+  "backend_parity_evidence": "sack-titanic-fix12-backend-source-parity-20261004.json",
+  "full_workflow_acceptance": "Both sequential fix12 workflows strictly accepted=true; immutable tested source matches local.",
+  "graphdb_full_acceptance_report": "sack-titanic-fix12-graphdb-acceptance-20261004.json",
+  "tugraph_started_at": "2026-10-04T15:05:27.178749+00:00",
+  "tugraph_full_acceptance_report": "sack-titanic-fix12-tugraph-acceptance-20261005.json",
+  "final_evidence_report": "sack-titanic-fix12-final-evidence-20261005.json"
+}
