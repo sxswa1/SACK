@@ -68,7 +68,7 @@ def missing_insight_fields(template, data, path='') -> list[str]:
     return []
 
 
-def parse_json_object(raw: str) -> dict:
+def _parse_json_value(raw: str):
     candidates = [raw.strip(), *re.findall(r"```(?:json)?\s*\n?(.*?)```", raw, re.S | re.I)]
     objects = []
     for candidate in candidates:
@@ -76,11 +76,53 @@ def parse_json_object(raw: str) -> dict:
             value = json.loads(candidate.strip())
         except (ValueError, TypeError):
             continue
-        if isinstance(value, dict) and value not in objects:
+        if not any(type(value) is type(existing) and value == existing for existing in objects):
             objects.append(value)
     if len(objects) != 1:
-        raise ReplyFormatError("Expected one JSON object, received invalid or ambiguous content")
+        raise ReplyFormatError("Expected one JSON value, received invalid or ambiguous content")
     return objects[0]
+
+
+def parse_json_object(raw: str) -> dict:
+    value = _parse_json_value(raw)
+    if not isinstance(value, dict):
+        raise ReplyFormatError(f"Expected a JSON object, received {type(value).__name__}")
+    return value
+
+
+def parse_planner_plan(raw: str) -> dict:
+    """Normalize a task array only after validating the Planner's output contract."""
+    value = _parse_json_value(raw)
+    if isinstance(value, list):
+        value = {"final_answer": value}
+    if not isinstance(value, dict) or not isinstance(value.get("final_answer"), list):
+        raise ReplyFormatError('Expected a Planner object with a "final_answer" task array')
+    tasks = value["final_answer"]
+    if not tasks:
+        raise ReplyFormatError("Planner task array must not be empty")
+    fields = ("tools, involved features and correct parameters",
+              "expected output or impact on data", "constraints")
+    aliases = {"tools_involved_features_and_correct_parameters": fields[0],
+               "expected_output_or_impact_on_data": fields[1]}
+    normalized = []
+    for index, task in enumerate(tasks):
+        if not isinstance(task, dict) or not isinstance(task.get("task"), str) or not task["task"].strip():
+            raise ReplyFormatError(f"Planner task {index} must be an object with nonempty task text")
+        task = dict(task)
+        for alias, field in aliases.items():
+            if alias in task:
+                if field in task and task[field] != task[alias]:
+                    raise ReplyFormatError(f"Planner task {index}: conflicting values for {field!r}")
+                task[field] = task.pop(alias)
+        for field in fields:
+            items = task.get(field)
+            if (not isinstance(items, list) or
+                    any(not isinstance(item, str) or not item.strip() for item in items) or
+                    (field != "constraints" and not items)):
+                raise ReplyFormatError(f"Planner task {index}: {field!r} must be a string array "
+                                       "(only constraints may be empty)")
+        normalized.append(task)
+    return {**value, "final_answer": normalized}
 
 
 def normalize_review(reply: dict, expected_role: str | None = None) -> dict:

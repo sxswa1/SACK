@@ -140,13 +140,14 @@ PROMPT_DATA_PREPARATION_SUPPLEMENT='''
 
 ## REQUIREMENTS ##
 Please carefully analyze the following requirements and consider the coupling effects among different processes.
-1. Detect file encoding before reading (recommend using chardet.detect) to avoid garbling.
-2. Make sure each data file has only ONE row for the column name (header).
- - A row is considered a header if >80% of its cells are non-numeric (after attempting to parse numeric strings).
- - If N (N≥2) header rows found, merge column-wise with `_`.
- - Do NOT skip any header rows; merge all detected header rows into one.
-3. First column of all data files must be an `id` column (unique integer identifier): 
- - The `id` between `train.csv` and `test.csv` is generally consecutive; `id` in `sample_submission.csv` and `test.csv` is generally the same.
+1. Read UTF-8 (including BOM) first; detect another encoding only if decoding fails. Check the entire file, since an ASCII prefix does not imply ASCII-only data.
+2. Make sure each data file has ONE header row. Use the documented schema or explicit column names to identify it.
+ - Categorical data rows are valid observations, even if most cells are non-numeric. Do not remove them as presumed headers.
+ - Merge multiple header rows only when the source schema explicitly defines a multi-row header.
+3. First column of all standardized data files must be named `id`:
+ - Preserve source identifier values exactly, including strings, leading zeros, gaps and row order. Rename the source ID column to `id`; do not renumber it or require consecutive integers.
+ - IDs must be non-empty and unique within each table. The test and sample_submission ID sequences MUST be identical; never require these two tables to have disjoint IDs.
+ - Preserve rawdata files, row counts, target values and sample target placeholders. Preparation does not clean, encode or impute data.
 4. Ensure that the names of feature columns (as model inputs) are exactly the same in `train.csv` and `test.csv`, and the names of target columns (as model outputs) are exactly the same in `train.csv` and `sample_submission.csv`:
  - Identify the column names in both datasets and check if they are the same.
  - Unify column names if different but obviously corresponding.

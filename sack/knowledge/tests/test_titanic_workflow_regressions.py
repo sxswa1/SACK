@@ -258,6 +258,50 @@ def test_agent_parses_plain_json_and_markdown_without_formatting_calls():
     assert methods['_parse_markdown'](agent, '# Valid plan\nStep 1') == '# Valid plan\nStep 1'
 
 
+@pytest.mark.parametrize('ids', [['2', '18', '95'], ['0001_01', '0007_03', '0012_01']])
+def test_preparation_preserves_nonconsecutive_and_string_source_ids(tmp_path, ids):
+    methods = load_methods('sack/Tools/unit_test.py', 'TestTool',
+                           ['check_id_column_validity', 'check_id_column_consistency'], pd=pd)
+    raw = tmp_path / 'rawdata'
+    raw.mkdir()
+    for filename in ['train.csv', 'test.csv', 'sample_submission.csv']:
+        pd.DataFrame({'PassengerId': ids, 'value': [1, 2, 3]}).to_csv(raw / filename, index=False)
+        pd.DataFrame({'id': ids, 'value': [1, 2, 3]}).to_csv(tmp_path / filename, index=False)
+    state = SimpleNamespace(competition_dir=str(tmp_path))
+    assert methods['check_id_column_validity'](None, state)[0]
+    assert methods['check_id_column_consistency'](None, state)[0]
+    # Renumbering and reversing rows must fail even if the identifiers are unique.
+    pd.DataFrame({'id': ['0', '1', '2']}).to_csv(tmp_path / 'train.csv', index=False)
+    assert not methods['check_id_column_validity'](None, state)[0]
+    pd.DataFrame({'id': list(reversed(ids))}).to_csv(tmp_path / 'sample_submission.csv', index=False)
+    assert not methods['check_id_column_consistency'](None, state)[0]
+
+
+@pytest.mark.parametrize('ids', [['1', '1'], ['1', None], ['1', '  ']])
+def test_preparation_rejects_duplicate_or_missing_identifiers(tmp_path, ids):
+    methods = load_methods('sack/Tools/unit_test.py', 'TestTool', ['check_id_column_validity'], pd=pd)
+    for filename in ['train.csv', 'test.csv', 'sample_submission.csv']:
+        pd.DataFrame({'id': ids}).to_csv(tmp_path / filename, index=False)
+    assert not methods['check_id_column_validity'](None, SimpleNamespace(competition_dir=str(tmp_path)))[0]
+
+
+def test_json_repair_has_answer_budget_and_only_one_attempt():
+    methods = load_methods('sack/Agents/agent_base.py', 'Agent', ['_parse_json'],
+                           PROMPT_REORGANIZE_JSON='{information}')
+    calls = []
+    def generate(*args, **kwargs):
+        calls.append(kwargs)
+        return '{"repaired": true}', []
+    agent = SimpleNamespace(role='planner', llm=SimpleNamespace(generate=generate))
+    assert methods['_parse_json'](agent, 'truncated {') == {'repaired': True}
+    assert len(calls) == 1
+    assert calls[0]['enable_thinking'] is False
+    assert calls[0]['max_completion_tokens'] == 8192
+    agent.llm.generate = lambda *a, **kw: ('still invalid', [])
+    with pytest.raises(ReplyFormatError):
+        methods['_parse_json'](agent, 'invalid')
+
+
 def test_incomplete_insight_cannot_pass_stage_score():
     methods = load_methods('sack/state.py', 'State', ['set_score'])
     state = SimpleNamespace(memory=[{'reviewer': {'score': {'agent planner': 5, 'agent developer': 5}},

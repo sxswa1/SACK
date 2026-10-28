@@ -221,14 +221,17 @@ You MUST ensure that the essential information is complete and accurate.
 #############
 # RESPONSE: JSON FORMAT #
 Here is the JSON format you should follow:
+Return exactly one valid JSON object with a nonempty "final_answer" task array.
+Do not include prose, Python type annotations or list= syntax.
+Keep the plan concise enough to finish within the response limit.
 ```json
 {{
-    "final_answer": list=[
+    "final_answer": [
         {{
             "task": "Specific task (Referenced from: Competition[xxx] -> Pipeline[xxx] -> Insight[ci_1]: [adaptation])",
-            "tools, involved features and correct parameters": list=["The tools, involved features and correct parameters to be used"],
-            "expected output or impact on data": list=["The expected output of the action or the impact of the action on the data"],
-            "constraints": list=["Any constraints or considerations to keep in mind"]
+            "tools, involved features and correct parameters": ["The tools, involved features and correct parameters to be used"],
+            "expected output or impact on data": ["The expected output of the action or the impact of the action on the data"],
+            "constraints": ["Any constraints or considerations to keep in mind"]
         }}
     ]
 }}

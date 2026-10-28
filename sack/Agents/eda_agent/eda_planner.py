@@ -86,7 +86,8 @@ class EDAPlanner(Planner):
 
         # Round 3 - 组织为JSON格式
         input = PROMPT_PLNNAER_REORGANIZE_IN_JSON
-        raw_json_plan, history = self.llm.generate(input, history, max_completion_tokens=4096)
+        raw_json_plan, history = self.llm.generate(input, history, max_completion_tokens=8192,
+                                                  enable_thinking=False)
         with open(f'{state.restore_dir}/raw_json_plan_reply.txt', 'w', encoding='utf-8') as f:
             f.write(raw_json_plan)
         try:

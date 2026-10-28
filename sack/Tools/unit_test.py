@@ -735,7 +735,7 @@ Here is the information about the features of processed_test.csv:
 
 
     def check_id_column_validity(self, state: State):
-        """Check whether id columns contain consecutive integers."""
+        """Validate source identifiers without requiring integer ranges."""
         invalid_files = []
         for file_name in ["train.csv", "test.csv", "sample_submission.csv"]:
             file_path = f"{state.competition_dir}/{file_name}"
@@ -743,7 +743,7 @@ Here is the information about the features of processed_test.csv:
                 invalid_files.append(
                     f"{file_name} (file does not exist, see Test `check_file_existence` for more details)")
                 continue
-            df = pd.read_csv(file_path)
+            df = pd.read_csv(file_path, dtype={'id': 'string'}, skip_blank_lines=False)
 
             preview = df.head(5).to_string(na_rep='nan')  # 只返回前五行就可以看到问题所在
             return_preview = f"\n file preview:\n{preview}"
@@ -751,36 +751,37 @@ Here is the information about the features of processed_test.csv:
             if 'id' not in df.columns:
                 invalid_files.append(f"{file_name} (missing 'id' column)"+return_preview)
                 continue
-            # 检查 ID 列是否为整数类型。
-            if not pd.api.types.is_integer_dtype(df['id']):
-                invalid_files.append(f"{file_name} (non-integer 'id' column)"+return_preview)
+            if df['id'].isna().any() or df['id'].str.strip().eq('').any():
+                invalid_files.append(f"{file_name} (missing or empty 'id' values)"+return_preview)
                 continue
             # 检查ID列是否为整数类型
             if df['id'].duplicated().any():
                 invalid_files.append(f"{file_name} (duplicate 'id' values)"+return_preview)
                 continue
-            # 检查ID列是否有重复值
-            sorted_values = df['id'].sort_values().reset_index(drop=True)
-            expected_values = pd.Series(range(sorted_values.min(), sorted_values.max() + 1))
-            if not sorted_values.equals(expected_values):
-                invalid_files.append(f"{file_name} (non-consecutive 'id' values)"+return_preview)
+            raw_path = os.path.join(state.competition_dir, 'rawdata', file_name)
+            if os.path.isfile(raw_path):
+                raw = pd.read_csv(raw_path, dtype='string', skip_blank_lines=False)
+                source_id = next((name for name in raw.columns
+                                  if name.lower() in {'id', 'passengerid'}), None)
+                if source_id and df['id'].tolist() != raw[source_id].tolist():
+                    invalid_files.append(f"{file_name} (source IDs or row order changed)"+return_preview)
 
         if invalid_files:
             return False, 42, f"Invalid 'id' column in: {'; '.join(invalid_files)}"
         else:
-            return True, 42, "All 'id' columns are valid (consecutive integers)"
+            return True, 42, "All 'id' columns are non-empty, unique and preserve available source IDs. Gaps and string IDs are valid."
 
 
     def check_id_column_consistency(self, state: State):
         """Check whether test.csv and sample_submission.csv have consistent id columns."""
-        test_df = pd.read_csv(f"{state.competition_dir}/test.csv")
-        submission_df = pd.read_csv(f"{state.competition_dir}/sample_submission.csv")
+        test_df = pd.read_csv(f"{state.competition_dir}/test.csv", dtype={'id': 'string'})
+        submission_df = pd.read_csv(f"{state.competition_dir}/sample_submission.csv", dtype={'id': 'string'})
 
         if 'id' not in test_df.columns or 'id' not in submission_df.columns:
             return False, 43, "The id column consistency check fails here because id column is missing (see Test 42 for details)."
         else:
-            if sorted(test_df['id'].tolist()) != sorted(submission_df['id'].tolist()):
-                return False, 43, "ID columns in test.csv and sample_submission.csv are inconsistent."
+            if test_df['id'].tolist() != submission_df['id'].tolist():
+                return False, 43, "IDs and row order in test.csv and sample_submission.csv must be identical."
             else:
                 return True, 43, "ID columns in test.csv and sample_submission.csv are consistent."
 

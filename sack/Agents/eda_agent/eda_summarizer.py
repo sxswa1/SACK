@@ -395,7 +395,8 @@ class EDASummarizer(Summarizer):
                 populated_with_evidence_raw, population_history = self.llm.generate(
                     population_prompt,
                     population_history,
-                    max_completion_tokens=8192
+                    max_completion_tokens=16384,
+                    enable_thinking=False
                 )
                 # 检查返回结果是否有效。
                 if populated_with_evidence_raw and populated_with_evidence_raw.strip():

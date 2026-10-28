@@ -14,10 +14,23 @@ from sack.Agents.agent_grag import GraphRetriever
 from sack.utils import read_file
 from sack.state import State
 from sack.paths import SACK_CONFIG_PATH
+from sack.runtime_support import parse_planner_plan
 from sack.Prompts.prompt_base import *
 from sack.Prompts.prompt_planner import *
 
 class Planner(Agent):
+    def _parse_json(self, raw_reply: str) -> Dict[str, Any]:
+        return super()._parse_json(
+            raw_reply, parser=parse_planner_plan,
+            repair_instruction=(
+                'Return exactly one JSON object {"final_answer": [task objects]}. '
+                'Each task must have nonempty string "task" and string arrays '
+                '"tools, involved features and correct parameters", '
+                '"expected output or impact on data", and "constraints". '
+                'The task array, tools and expected outputs must be nonempty. '
+                'Preserve the supplied plan; do not invent missing facts. '
+                'Do not use list=, type annotations, or prose.'))
+
     def __init__(self, model: str, type: str):  
         super().__init__(
             role="planner",
@@ -161,12 +174,18 @@ class Planner(Agent):
 
             # Round 3：把计划组织成 JSON 并存档。
             input = PROMPT_PLNNAER_REORGANIZE_IN_JSON.format(task_core_elements=INSIGHT_REFERENCE_SPEC,insight_reference_spec=TASK_CORE_ELEMENTS)
-            raw_json_plan, history = self.llm.generate(input, history, max_completion_tokens=4096)
+            raw_json_plan, history = self.llm.generate(input, history, max_completion_tokens=8192,
+                                                      enable_thinking=False)
+            with open(f'{state.restore_dir}/raw_json_plan_reply.txt', 'w', encoding='utf-8') as output:
+                output.write(raw_json_plan)
             try:
-                json_plan = self._parse_json(raw_json_plan)['final_answer']
-            except Exception as e:
-                logger.info(f"Error parsing JSON: {e}")
-                json_plan = self._parse_json(raw_json_plan)
+                parsed_plan = self._parse_json(raw_json_plan)
+                json_plan = parsed_plan.get('final_answer', parsed_plan)
+            finally:
+                with open(f'{state.restore_dir}/{self.role}_history.json', 'w', encoding='utf-8') as output:
+                    json.dump(history, output, ensure_ascii=False, indent=4)
+                with open(f'{state.restore_dir}/planner_json_parse.json', 'w', encoding='utf-8') as output:
+                    json.dump(getattr(self, '_last_json_parse', {}), output, ensure_ascii=False, indent=4)
             with open(f'{state.restore_dir}/json_plan.json', 'w',encoding='utf-8') as f:
                 json.dump(json_plan, f, ensure_ascii=False,indent=4)
 

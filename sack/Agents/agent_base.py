@@ -221,18 +221,26 @@ class Agent:
             f.write(data_preview)
         return data_preview
 
-    def _parse_json(self, raw_reply: str) -> Dict[str, Any]:  # 把大模型返回的json text 提取成json
+    def _parse_json(self, raw_reply: str, *, parser=None, repair_instruction="") -> Dict[str, Any]:
+        parser = parser or parse_json_object
         self._last_json_parse = {"original": raw_reply}
         try:
-            parsed = parse_json_object(raw_reply)
-        except ReplyFormatError:
+            parsed = parser(raw_reply)
+        except ReplyFormatError as exc:
+            self._last_json_parse["original_error"] = str(exc)
             logger.info("Reply needs JSON object repair.")
             prompt = (PROMPT_REORGANIZE_EXTRACT_TOOLS if self.role == 'developer'
                       else PROMPT_REORGANIZE_JSON)
-            repaired, _ = self.llm.generate(prompt.format(information=raw_reply), history=[],
-                                            max_completion_tokens=4096)
+            repair_prompt = (prompt.format(information=raw_reply) + "\nValidation error: "
+                             + str(exc) + "\n" + repair_instruction)
+            repaired, _ = self.llm.generate(repair_prompt, history=[],
+                                            max_completion_tokens=8192, enable_thinking=False)
             self._last_json_parse["repaired"] = repaired
-            parsed = parse_json_object(repaired)
+            try:
+                parsed = parser(repaired)
+            except ReplyFormatError as repair_exc:
+                self._last_json_parse["repair_error"] = str(repair_exc)
+                raise
         self._last_json_parse["parsed"] = parsed
         return parsed
     def _parse_markdown(self, raw_reply: str) -> str:
