@@ -45,6 +45,15 @@ def validate(entry, returncode):
     comp = entry["competition"]
     workspace = repo / "data/competitions" / comp
     evidence = {"checked_at": now(), "exit_code": returncode, "errors": errors}
+    try:
+        sys.path.insert(0, str(repo))
+        from sack.model_audit import validate_receipt
+        model_stage = workspace / 'model_build_predict'
+        evidence['training_evidence'] = validate_receipt(
+            workspace, model_stage / 'model_build_predict_run_code.py',
+            model_stage / 'training_execution.json')
+    except (OSError, ValueError, KeyError) as exc:
+        errors.append('Real training/prediction evidence: ' + str(exc))
     for name, expected in entry["raw_sha256"].items():
         if digest(workspace / "rawdata" / name) != expected:
             errors.append("Raw input changed: " + name)

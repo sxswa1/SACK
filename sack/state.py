@@ -1,6 +1,7 @@
 ﻿import os
 import json
 import pdb
+import math
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -247,14 +248,24 @@ class State:
         if self.memory[-1].get('summarizer', {}).get('quality_valid') is False:
             self.score = 0
             return
-        final_score = self.memory[-1]['reviewer']['score']
-        if final_score.get('agent developer', 3) == 0: # developer的分数为0 表示代码没通过 阶段的执行分数就是0
-            self.score = 0
-        else:
-            if len(final_score):
-                self.score = sum(float(score) for score in final_score.values()) / len(final_score) # 平均分
-            else:
-                self.score = 3
+        current = self.memory[-1]
+        review = current.get('reviewer', {})
+        scores = review.get('score', {})
+        required = ['agent reader'] if self.phase == 'Understand Background' else ['agent planner', 'agent developer']
+        self.score = 0
+        if review.get('result', {}).get('critical_failures'):
+            return
+        if any(role not in scores or isinstance(scores[role], bool) or
+               not isinstance(scores[role], (int, float)) or not math.isfinite(scores[role]) or
+               not 0 <= scores[role] <= 5 for role in required):
+            return
+        if 'agent developer' in required and current.get('developer', {}).get('status') is not True:
+            return
+        if self.phase == 'Model Building, Validation, and Prediction':
+            if current.get('developer', {}).get('training_evidence', {}).get('passed') is not True:
+                return
+        # Every required role must pass. A strong plan cannot offset broken code.
+        self.score = min(scores[role] for role in required)
 
     def check_finished(self) -> bool:
         self.finished = self.current_step == len(self.agents)

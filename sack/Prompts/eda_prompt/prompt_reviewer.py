@@ -1,4 +1,4 @@
-﻿EDA_REVIEW_CRITERIA = """
+EDA_REVIEW_CRITERIA = """
 ## EDA TOOL-BASED EVALUATION CRITERIA ##
 
 **For PLANNER Assessment:**
@@ -45,7 +45,7 @@ You will receive:
 - FULL context of available predefined EDA tools (list + detailed descriptions)
 
 **Evaluation Requirements:**
-- Assign a score from 1 to 5 (1=very poor, 5=excellent) for each agent
+- Assign a score from 0 to 5 (0=critical failure, 1=very poor, 5=excellent) for each agent
 - Provide specific suggestions focused on "maximizing tool utilization" (e.g., which key tools were omitted, how to improve parameter configuration)
 - Evaluate whether agents have made the most of available tools for the given data characteristics
 
@@ -114,39 +114,5 @@ AGENT_EDA_EVALUATION_GUIDANCE = {
 }
 
 
-PROMPT_REVIEWER_ROUND2 = '''
-# TASK #
-Please extract essential information from your last answer and reorganize into a specified JSON format. You need to organize the information in a clear and concise manner, ensuring that the content is logically structured and easy to understand. You must ensure that the essential information is complete and accurate.
-
-#############
-# RESPONSE: JSON FORMAT #
-Here is the JSON format you should follow:
-```json
-{{
-    "final_answer": {{
-	    "final_suggestion": {{
-            str="agent name": str="Specific suggestions for improving the agent's performance"
-        }},
-        "final_score": {{
-            str="agent name": int="The final score you assign to the evaluated agent, only one score in range 1-5"
-        }}
-    }}
-}}
-```
-Here is an example you can refer to:
-```json
-{{
-    "final_suggestion": {{
-        "agent developer": "1. Tool Maximization: Add `analyze_categorical_cardinality` tool call for string columns (omitted in current code). 2. Parameter Optimization: Set `threshold=0.1` for `detect_outliers` (per tool description) instead of default 0.05 to capture meaningful outliers.",
-        "agent planner": "1. Tool Coverage: Include `quantify_synergistic_interactions` tool for numerical feature relationships (omitted in plan). 2. Execution Order: Move `calculate_overall_missing_rate` to first step (logical priority per tool usage guidelines)."
-    }},
-    "final_score": {{
-        "agent developer": 3,
-        "agent planner": 4
-    }}
-}}
-```
-
-#############
-# START REORGANIZING #
-'''
+# Share the executable JSON contract and critical-failure schema with normal review.
+from sack.Prompts.prompt_reviewer import PROMPT_REVIEWER_ROUND2

@@ -135,7 +135,7 @@ def normalize_review(reply: dict, expected_role: str | None = None) -> dict:
     suggestions = content.get("final_suggestion", content.get("suggestion", {}))
     if not isinstance(scores, dict) or not isinstance(suggestions, dict):
         raise ReplyFormatError("Reviewer scores and suggestions must be objects")
-    result = {"final_score": {}, "final_suggestion": {}}
+    result = {"final_score": {}, "final_suggestion": {}, "critical_failures": []}
     for field, values in (("final_score", scores), ("final_suggestion", suggestions)):
         for key, value in values.items():
             role = re.search(r"\b(reader|planner|developer)\b", str(key).lower().replace("_", " "))
@@ -163,6 +163,21 @@ def normalize_review(reply: dict, expected_role: str | None = None) -> dict:
         raise ReplyFormatError(f"Missing score for agent {expected_role}")
     if not result["final_score"]:
         raise ReplyFormatError("Reviewer reply contains no recognized scores")
+    failures = content.get("critical_failures", [])
+    if not isinstance(failures, list):
+        raise ReplyFormatError("critical_failures must be an array")
+    for failure in failures:
+        if not isinstance(failure, dict):
+            raise ReplyFormatError("Each critical failure must be an object")
+        agent = failure.get("agent", "agent " + expected_role if expected_role else "")
+        match = re.fullmatch(r"(?:agent[ _])?(reader|planner|developer)", str(agent).lower())
+        if not match or any(not isinstance(failure.get(k), str) or not failure[k].strip()
+                            for k in ("code", "evidence")):
+            raise ReplyFormatError("Critical failures need an agent, code and concrete evidence")
+        if expected_role and match[1] != expected_role:
+            continue
+        result["critical_failures"].append({"agent": "agent " + match[1],
+                                             "code": failure["code"], "evidence": failure["evidence"]})
     return result
 
 

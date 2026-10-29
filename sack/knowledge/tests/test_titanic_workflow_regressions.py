@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import logging
+import math
 import os
 from pathlib import Path
 import re
@@ -35,12 +36,13 @@ def load_methods(relative, class_name, names, **extra):
         for arg in method.args.args:
             arg.annotation = None
     namespace = dict(os=os, json=json, re=re, copy=copy, sys=sys, subprocess=subprocess,
-                     logger=logging.getLogger('test'), logging=logging, Path=Path,
+                     logger=logging.getLogger('test'), logging=logging, math=math, Path=Path,
                      extract_stage_body=extract_stage_body, strip_stage_output=strip_stage_output,
                      normalize_review=normalize_review, parse_json_object=parse_json_object,
                      ReplyFormatError=ReplyFormatError, ToolCallError=ToolCallError,
                      validate_eda_tool_keywords=validate_eda_tool_keywords,
-                     SACK_PACKAGE_DIR=ROOT / 'sack', **extra)
+                     SACK_PACKAGE_DIR=ROOT / 'sack')
+    namespace.update(extra)
     exec(compile(ast.fix_missing_locations(ast.Module(body=methods, type_ignores=[])),
                  relative, 'exec'), namespace)
     return {name: namespace[name] for name in names}
@@ -212,7 +214,8 @@ def test_role_scoped_reviews_ignore_conflicting_other_role_scores(tmp_path):
     parsed = methods['_parse_review_replies'](reviewer, raw, state)
     merged = methods['_merge_dicts'](reviewer, parsed, state)
     assert merged == {'final_score': {'agent planner': 3, 'agent developer': 4},
-                      'final_suggestion': {'agent planner': 'revise plan', 'agent developer': 'fix code'}}
+                      'final_suggestion': {'agent planner': 'revise plan', 'agent developer': 'fix code'},
+                      'critical_failures': []}
     with pytest.raises(ReplyFormatError, match='Missing score'):
         normalize_review({'final_score': {'agent developer': 4}}, 'planner')
 

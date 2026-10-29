@@ -8,6 +8,8 @@ import copy
 import subprocess
 import shutil
 import pdb
+import uuid
+from sack.model_audit import validate_receipt
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -114,6 +116,7 @@ class Developer(Agent):
         return no_code_flag, path_to_code, path_to_run_code
 
     def _run_code(self, state: State, no_code_flag: bool, path_to_run_code: str) -> str: # 执行代码
+        self._training_evidence = {}
         # Delete previous images files
         if 'eda' in state.dir_name:
             images_dir = f'{state.restore_dir}/images/'
@@ -169,8 +172,15 @@ class Developer(Agent):
         else: # 其他阶段。
             timeout = 3600
             timeout_info = "Your code is running out of time, please consider resource availability or other factors."
+        command = [sys.executable, '-W', 'ignore', path_to_run_code]
+        if state.phase == 'Model Building, Validation, and Prediction':
+            run_id = uuid.uuid4().hex
+            receipt = os.path.join(state.restore_dir, 'training_execution.json')
+            command = [sys.executable, '-W', 'ignore', '-m', 'sack.model_audit',
+                       '--script', path_to_run_code, '--task', str(state.competition_dir),
+                       '--receipt', receipt, '--run-id', run_id]
         try:
-            result = subprocess.run([sys.executable, '-W', 'ignore', path_to_run_code],
+            result = subprocess.run(command,
                                     capture_output=True, text=True, timeout=timeout,encoding='utf-8'
                                    ) # 执行代码  preexec_fn=os.setsid适用于unix  windows似乎不需要  windows系统用python linux用python3
         except subprocess.TimeoutExpired:  # 记录超时错误。
@@ -202,6 +212,18 @@ class Developer(Agent):
                     f.write(error_message)
                 error_flag = True
             else: # 正常执行
+                if state.phase == 'Model Building, Validation, and Prediction':
+                    try:
+                        self._training_evidence = validate_receipt(
+                            state.competition_dir, path_to_run_code, receipt, run_id)
+                    except (OSError, ValueError, KeyError) as exc:
+                        error_message = 'Training evidence validation failed: ' + str(exc)
+                        self.all_error_messages.append(error_message)
+                        with open(path_to_error, 'w', encoding='utf-8') as output:
+                            output.write(error_message)
+                        with open(path_to_output, 'w', encoding='utf-8') as output:
+                            output.write(result.stdout)
+                        return True
                 logger.info("Code executed successfully without errors.")
                 self._save_all_error_messages(state)
                 self.all_error_messages = []
@@ -323,6 +345,26 @@ class Developer(Agent):
         else:
             prompt_round1 += "# AVAILABLE TOOLS #\nThere is no pre-defined Tools in this phase. You can use the functions from public libraries such as Pandas, NumPy, Scikit-learn, etc.\n"  # 没有预定义工具。
 
+        if state.phase == 'Model Building, Validation, and Prediction':
+            prompt_round1 += '''
+# REQUIRED EXECUTION CONTRACT
+Call the real predefined train_and_validation_and_select_the_best_model tool.
+It is already imported from Tools.ml_tools by the framework; do not import a
+nonexistent module named train_and_validation_and_select_the_best_model.
+Signature: (X, y, problem_type='binary', selected_models=[...]).
+Supported model names: 'logistic regression', 'decision tree', 'random forest',
+'XGBoost', 'SVM' (regression uses 'linear regression' instead of logistic regression).
+Use a concise model selection appropriate to the runtime budget.
+Supply full ordered processed_train.csv predictors as a DataFrame (exclude id and
+target) and the corresponding full target vector. The tool validates and refits
+the best estimator on the full training data, returning ONE model, not a tuple.
+Use model.predict on the ordered processed_test.csv predictor DataFrame with the
+same feature columns. Preserve original test IDs and original target label spelling;
+inverse-transform encoded targets before writing submission.csv. Do not refit the
+returned model, fabricate metrics, simulate training, or generate placeholder predictions.
+The framework independently verifies training and that submission matches the actual
+model predictions. A printed claim or a pre-existing submission is not sufficient.
+'''
         return prompt_round1
 
 
@@ -515,7 +557,8 @@ class Developer(Agent):
                 "task": task,
                 "input": input_used_in_review,
                 "result": raw_reply,
-                "status": execution_flag
+                "status": execution_flag,
+                "training_evidence": getattr(self, '_training_evidence', {})
             }
         }
     

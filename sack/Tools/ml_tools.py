@@ -1066,7 +1066,7 @@ def train_and_validation_and_select_the_best_model(X, y, problem_type='binary',
         raise ValueError("Invalid problem_type. Choose from 'binary', 'multiclass', or 'regression'.")
 
     best_model = None
-    best_score = float('-inf') if problem_type in ['binary', 'multiclass'] else float('inf')
+    best_score = float('-inf')
     results = {}
 
     models = {model_name: models[model_name] for model_name in selected_models}
@@ -1090,8 +1090,7 @@ def train_and_validation_and_select_the_best_model(X, y, problem_type='binary',
             'score': score
         }
 
-        if (problem_type in ['binary', 'multiclass'] and score > best_score) or \
-                (problem_type == 'regression' and score < best_score):
+        if score > best_score:
             best_score = score
             best_model = optimizer.best_estimator_
 
@@ -1099,7 +1098,13 @@ def train_and_validation_and_select_the_best_model(X, y, problem_type='binary',
     for model_name, result in results.items():
         print(f"Model: {model_name}, Best Params: {result['best_params']}, Score: {result['score']}")
 
-    return best_model
+    if best_model is None:
+        raise ValueError('No model was trained successfully')
+    best_model.fit(X, y)
+    from sack.model_audit import record_training
+    metric = ('accuracy' if problem_type == 'binary' else
+              'f1_weighted' if problem_type == 'multiclass' else 'negative_mse')
+    return record_training(best_model, X, y, results, best_score, metric)
 
 # Example usage:
 # best_model, performance_results = select_best_model(X, y, problem_type='classification')

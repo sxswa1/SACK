@@ -24,11 +24,12 @@ class Reviewer(Agent):
         )
 
     def _merge_dicts(self, dicts: List[Dict[str, Any]], state: State) -> Dict[str, Any]:
-        merged_dict = {"final_suggestion": {}, "final_score": {}}
+        merged_dict = {"final_suggestion": {}, "final_score": {}, "critical_failures": []}
 
         for reply in dicts:
             normalized = normalize_review(reply)
-            for field in merged_dict:
+            merged_dict['critical_failures'].extend(normalized['critical_failures'])
+            for field in ('final_suggestion', 'final_score'):
                 for role, value in normalized[field].items():
                     if role in merged_dict[field] and merged_dict[field][role] != value:
                         raise ReplyFormatError(f"Conflicting reviewer values for {role}")
@@ -37,6 +38,12 @@ class Reviewer(Agent):
         for role in expected:
             if 'agent ' + role not in merged_dict['final_score']:
                 raise ReplyFormatError(f"Missing reviewer score for agent {role}")
+        for failure in merged_dict['critical_failures']:
+            role = failure['agent']
+            merged_dict['final_score'][role] = 0
+            merged_dict['final_suggestion'][role] = (
+                merged_dict['final_suggestion'].get(role, '') +
+                f"\nCritical failure {failure['code']}: {failure['evidence']}")
         
         return merged_dict # 合并所有 Agent 信息后的字典。
 
@@ -64,6 +71,8 @@ class Reviewer(Agent):
                         f"Reformat this review for agent {role} into one JSON object. "
                         "Preserve the original evaluation and score. Use final_score and "
                         f"final_suggestion objects keyed by 'agent {role}'. "
+                        "Preserve every critical failure in critical_failures as objects with "
+                        "agent, code and concrete evidence; use [] only if none were identified. "
                         "Do not invent a missing score. Return JSON only.\n" + original
                     )
                     raw, _ = self.llm.generate(prompt, history=[], max_completion_tokens=4096)
@@ -84,6 +93,10 @@ class Reviewer(Agent):
             result = each_agent_memory["result"]
             # 评估某个角色 要结合它的角色定义 任务 输入和输出 进行全面评估
             prompt_for_agent = PROMPT_REVIEWER_ROUND1_EACH_AGENT.format(role=role.upper(), description=description, task=task, input=input, result=result)
+            if role == 'developer':
+                prompt_for_agent += "\n# FRAMEWORK EXECUTION EVIDENCE #\n" + json.dumps({
+                    'execution_and_tests_passed': each_agent_memory.get('status'),
+                    'training_evidence': each_agent_memory.get('training_evidence')}, ensure_ascii=False)
             prompt_for_agents.append(prompt_for_agent)
         return prompt_for_agents
     

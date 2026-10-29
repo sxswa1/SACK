@@ -1,4 +1,4 @@
-﻿from typing import Dict, Any, List
+from typing import Dict, Any, List
 import json
 import logging
 import os
@@ -8,6 +8,7 @@ logger.setLevel(logging.INFO)
 from sack.Agents.agent_reviewer import Reviewer
 from sack.state import State
 from sack.Prompts.eda_prompt.prompt_reviewer import *
+from sack.Prompts.prompt_reviewer import PROMPT_REVIEWER_ROUND2, CRITICAL_REVIEW_RULES
 
 class EDAReviewer(Reviewer):
     def __init__(self, model: str, type: str):
@@ -70,7 +71,7 @@ class EDAReviewer(Reviewer):
         all_raw_reply = []
 
         # 添加EDA评估标准到系统提示
-        enhanced_role_prompt = f"{role_prompt}{self.description}\n\n{EDA_REVIEW_CRITERIA}"
+        enhanced_role_prompt = f"{role_prompt}{self.description}\n\n{EDA_REVIEW_CRITERIA}\n{CRITICAL_REVIEW_RULES}"
         history.append({"role": "system", "content": enhanced_role_prompt})
 
         for agent_id in range(len(prompt_for_agents)):
