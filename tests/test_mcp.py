@@ -32,7 +32,9 @@ def service_env(tmp_path):
         save_research_report(workspace, "# 最终报告\n" + "真实归档内容。" * 100)
     tokens = tmp_path / "tokens.json"
     tokens.write_text(json.dumps(TOKENS))
-    return {**os.environ, "PYTHONPATH": str(ROOT), "SACK_REPORT_ROOT": str(store.root),
+    # Keep developer/deployment secrets out of subprocesses and pytest fixture reprs.
+    environment = {key: os.environ[key] for key in ("PATH", "TMPDIR", "LANG", "LC_ALL", "SYSTEMROOT") if key in os.environ}
+    return {**environment, "PYTHONPATH": str(ROOT), "SACK_REPORT_ROOT": str(store.root),
             "SACK_MCP_TOKEN_FILE": str(tokens)}, store, run_id
 
 

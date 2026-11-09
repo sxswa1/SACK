@@ -197,3 +197,14 @@ python -m pytest -q tests
 分页和历史版本、SHA-256、目录锁、中断恢复、历史证据导入和流水线发布边界。
 双客户端用官方 MCP SDK 模拟各自连接；不等于已操作实际 WorkBuddy/Codex UI。
 原有回归仍可在完整 SACK 环境运行：`python -m pytest -q sack/knowledge/tests`。
+
+对已经部署的 HTTP 服务做只读验收，可运行：
+
+```bash
+python scripts/verify_mcp_reports.py --url http://127.0.0.1:8765/mcp \
+  --token-file /opt/sack-mcp/private/tokens.json --experiment titanic
+```
+
+令牌文件至少提供两个不同客户端的令牌。脚本验证未授权访问被拒绝、三个工具可发现、
+并发客户端读取的报告与发布哈希一致；可用 `--expected-sha256` 再对照原始报告校验。
+本次服务器部署与测试证据见 [2026-11-09 验证记录](../reports/sack-mcp-validation-20261109.md)。
