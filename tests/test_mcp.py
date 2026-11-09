@@ -25,8 +25,8 @@ TOKENS = {"workbuddy": "workbuddy-test-" + "a" * 32, "codex": "codex-test-" + "b
 
 @pytest.fixture
 def service_env(tmp_path):
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
+    workspace = tmp_path / "experiments/titanic"
+    workspace.mkdir(parents=True)
     store = ReportStore(tmp_path / "reports")
     with tracked_run("titanic", workspace, store.root) as run_id:
         save_research_report(workspace, "# 最终报告\n" + "真实归档内容。" * 100)
@@ -35,7 +35,7 @@ def service_env(tmp_path):
     # Keep developer/deployment secrets out of subprocesses and pytest fixture reprs.
     environment = {key: os.environ[key] for key in ("PATH", "TMPDIR", "LANG", "LC_ALL", "SYSTEMROOT") if key in os.environ}
     return {**environment, "PYTHONPATH": str(ROOT), "SACK_REPORT_ROOT": str(store.root),
-            "SACK_MCP_TOKEN_FILE": str(tokens)}, store, run_id
+            "SACK_MCP_TOKEN_FILE": str(tokens), "SACK_EXPERIMENT_ROOT": str(workspace.parent)}, store, run_id
 
 
 @pytest.fixture

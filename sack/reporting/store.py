@@ -16,6 +16,7 @@ STATES = {"running", "succeeded", "failed", "interrupted", "unknown"}
 PUBLIC_FIELDS = (
     "schema_version", "experiment_name", "run_id", "status", "started_at",
     "completed_at", "report_ready", "report_sha256", "error_code", "source", "timestamp_source",
+    "training_completed", "acceptance_passed", "eda_status", "validation_metric", "validation_score", "acceptance_errors",
 )
 
 
@@ -89,8 +90,13 @@ class ReportStore:
             raise ReportError("ARTIFACT_UNREADABLE", "The requested report artifact cannot be read.") from None
 
     def manifest(self, experiment_name: str, run_id: str) -> dict:
+        return self.parse_manifest(self.read(self.path(experiment_name, run_id, "manifest.json"), 64 * 1024),
+                                   experiment_name, run_id)
+
+    @staticmethod
+    def parse_manifest(content: bytes, experiment_name: str, run_id: str) -> dict:
         try:
-            value = json.loads(self.read(self.path(experiment_name, run_id, "manifest.json"), 64 * 1024))
+            value = json.loads(content)
             if (not isinstance(value, dict) or value.get("schema_version") != 1 or
                     value.get("experiment_name") != experiment_name or value.get("run_id") != run_id or
                     value.get("status") not in STATES or not isinstance(value.get("started_at"), str) or

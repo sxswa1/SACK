@@ -7,11 +7,12 @@ Type=simple
 # Create this user and adjust paths for your deployment.
 User=sackeda
 Group=sackeda
-WorkingDirectory=/opt/sack-mcp/repo
-Environment=SACK_REPORT_ROOT=/opt/sack-mcp/reports
-Environment=SACK_MCP_TOKEN_FILE=/opt/sack-mcp/private/tokens.json
+WorkingDirectory=/opt/sack-tugraph-runtime-20261015/repo
+Environment=SACK_EXPERIMENT_ROOT=/opt/sack-tugraph-runtime-20261015/repo/data/competitions
+Environment=SACK_REPORT_ROOT=/opt/sack-tugraph-runtime-20261015/repo/storage/experiment_reports
+Environment=SACK_MCP_TOKEN_FILE=/opt/sack-tugraph-runtime-20261015/private/mcp-tokens.json
 Environment=PYTHONDONTWRITEBYTECODE=1
-ExecStart=/opt/sack-mcp/venv/bin/python -m sack.mcp --host 127.0.0.1 --port 8765
+ExecStart=/opt/sack-tugraph-runtime-20261015/mcp-venv/bin/python -m sack.mcp --host 127.0.0.1 --port 8765
 Restart=on-failure
 RestartSec=5
 UMask=0077

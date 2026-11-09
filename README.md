@@ -115,10 +115,15 @@ read-only service in [the MCP deployment guide](docs/mcp-reports.md). Install
 not need the training stack or database credentials. Streamable HTTP supports
 independent concurrent clients; stdio is also available.
 
-New `python -m sack run` executions archive reports by experiment name and run ID.
+The MCP lists the existing `data/competitions/<competition>/` directories,
+including tasks without final reports. New `python -m sack run` executions
+reuse those workspaces and save completion metadata beside `research_report.md`.
+Lightweight report snapshots retain older versions without copying the project.
 Only a successful pipeline return with a report generated in that same run
-publishes a report. Existing experiment outputs need an explicit historical
-import with completion evidence; EDA status alone does not prove completion.
+publishes a new report. Restored historical reports retain their source and
+acceptance evidence; EDA status alone does not prove pipeline completion.
+Server deployments update the fixed repository in place using Git. Generated
+data, reports, EDA process state and credentials stay out of source control.
 
 ## Artifact Notes
 

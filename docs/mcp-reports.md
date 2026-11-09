@@ -1,52 +1,125 @@
 # SACK 实验报告 MCP
 
-本服务让 WorkBuddy、Codex 等 MCP 客户端按实验名获取已完成的数据科学任务最终报告。
-支持同一 HTTP 服务上的独立并发客户端；查询不启动实验、不调用模型、不连接知识数据库。
+服务直接查询原有实验工作目录，供 WorkBuddy、Codex 按实验名查状态、获取报告。
+支持 Streamable HTTP 和 stdio；查询不运行实验、不调用模型、不连接知识数据库。
 
-## 安装与启动
+## 固定运行目录
 
-服务只需要 Python 3.10+ 和 `requirements-mcp.txt`。使用独立环境，不安装完整训练依赖：
+服务器统一使用 `/opt/sack-tugraph-runtime-20261015/`，不再按日期复制项目：
 
-```bash
-python3 -m venv /opt/sack-mcp/venv
-/opt/sack-mcp/venv/bin/pip install -r requirements-mcp.txt
-export SACK_REPORT_ROOT=/opt/sack-mcp/reports
-export SACK_MCP_TOKEN_FILE=/opt/sack-mcp/private/tokens.json
-/opt/sack-mcp/venv/bin/python -m sack.mcp
+```text
+/opt/sack-tugraph-runtime-20261015/
+├── repo/                         # 同一个 Git 仓库，原地更新代码
+│   ├── sack/
+│   ├── data/competitions/<name>/  # 同名实验始终使用原工作目录
+│   │   ├── research_report.md
+│   │   ├── run_manifest.json      # 新版流水线的当前运行状态
+│   │   ├── report_provenance.json # 恢复历史报告时的来源及验证分数
+│   │   └── report_acceptance.json # 保留原验收结论，包括失败项
+│   └── storage/experiment_reports/ # 轻量报告历史，不是项目/训练副本
+├── mcp-venv/                     # 独立 MCP 依赖，避免影响训练环境
+├── private/mcp-tokens.json
+└── sack-python                   # 原有实验运行入口
 ```
 
-HTTP 默认地址 `http://127.0.0.1:8765/mcp`。无有效 Token 配置时拒绝启动。
-独立服务与训练进程必须使用同一 `SACK_REPORT_ROOT`（或将其只读挂载给服务）。
-SDK 明确锁定官方 v1 维护线 `mcp==1.28.1`，兼容现有 Python 3.10 运行环境；
-不使用 v2 API，不自动跨大版本升级。参考[官方 v1 文档](https://py.sdk.modelcontextprotocol.io/v1/)。
+Git 管理代码、依赖声明和文档。`data/`、`storage/`、`.env`、API 密钥及
+`sack/competition_process_status.json` 是本地运行产物，不提交到 Git。
+首次运行缺少 EDA 状态文件时按空状态处理，之后自动创建。
 
-使用下面的命令生成不同客户端的令牌，输出仅写入私有文件：
+## 查询规则
+
+| 工具 | 参数 | 行为 |
+| --- | --- | --- |
+| `list_experiments` | keyword、cursor、limit | 从原始工作目录列出实验，每个实验一行，包括没有报告的任务 |
+| `get_experiment_status` | experiment_name、run_id? | 当前运行状态、可用报告、最近 20 次记录 |
+| `get_experiment_report` | experiment_name、run_id?、offset、max_chars | 优先读取原目录中已核验的报告，旧版本必要时从报告历史读取 |
+
+实验名精确对应 `data/competitions/<name>`，关键词搜索不区分大小写。
+`SACK_EXPERIMENT_ROOT` 可以指定其他实验父目录，默认使用仓库原有 data/competitions。
+列表按实验名排序，limit 为 1–100，使用返回的 next_cursor 续读。
+仅在历史目录中有记录而原始实验目录已不存在的任务，不自动冒充当前工作目录。
+
+新版流水线把当前状态原子保存到实验目录的 run_manifest.json。
+没有元信息的旧目录也会展示，但状态为 unknown；单独存在报告文件不代表已核实完成。
+已恢复历史报告的 report_provenance.json 记录其 SHA-256、原运行时间、训练和验收结果。
+读取前核验报告正文；每页 1–50000 个 Unicode 字符，全文上限 8 MiB。
+后续页必须固定返回的 run_id 和 next_offset；工作目录重跑后，已归档的旧页仍可读取。
+
+`latest_run` 表示当前/最近一次执行，`available_report` 表示可读取的报告版本。
+最近一次执行失败时，仍能返回此前完成的报告，并明确 is_latest_run=false。
+报告的 status=succeeded 表示 DSP 已完成并生成报告；`acceptance_passed` 是独立验收结论。
+例如 Ghouls 的训练报告可读，但 acceptance_passed=false、eda_status=fail，必须明确展示失败原因。
+验证分数是本地留出集指标，不是 Kaggle 排行榜分数。
+
+历史报告恢复时保留原文和原备份，核对训练执行回执、分数、退出码和 DSP 完成日志，
+把证据写在对应工作目录；不把旧报告标记成最近一次重跑的结果。
+没有完成证据的文件保持未核验，报告接口返回 REPORT_NOT_READY。
+
+## 新实验与报告历史
+
+继续使用原入口，例如：
 
 ```bash
-mkdir -p /opt/sack-mcp/private
-python3 - <<'PY'
-import json, os, secrets
-path = '/opt/sack-mcp/private/tokens.json'
-fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-with os.fdopen(fd, 'w') as stream:
-    json.dump({name: secrets.token_urlsafe(32) for name in ('workbuddy', 'codex')}, stream)
-PY
+/opt/sack-tugraph-runtime-20261015/sack-python -m sack run --competition titanic
 ```
 
-运行用户必须能够读取该文件。可使用 `root:<服务用户组>`、`0640` 和父目录 `0750`，
-避免给其他用户读取权限。也可用环境变量 `SACK_MCP_TOKEN` 提供单个令牌。
-更换令牌后重启服务。服务支持多个令牌，权限范围均为配置的整个报告归档目录；
-目前没有按用户/实验划分的权限，也未实现 OAuth。
+工作目录始终是原 repo/data/competitions/titanic，不创建新的项目或训练副本。
+运行开始时取得同名实验目录锁，生成唯一 run_id；报告仍写入该目录的 research_report.md。
+只有整条流水线成功返回且本次实际生成了非空报告，才标记 report_ready=true。
+失败和中断会记录状态；旧成功报告保留在 storage/experiment_reports/<name>/<run_id>。
+该目录只存报告快照和 JSON 元信息，不复制数据、模型环境或整个仓库。
 
-本地 stdio（由客户端启动进程，无 HTTP 端口，使用操作系统用户权限）：
+SIGKILL/断电可能遗留 running 状态。确认旧进程已退出后在原服务器执行：
 
 ```bash
-python -m sack.mcp --transport stdio
+cd /opt/sack-tugraph-runtime-20261015/repo
+../mcp-venv/bin/python -m sack.reporting recover-run --experiment titanic \
+  --run-id <run_id> --workspace /opt/sack-tugraph-runtime-20261015/repo/data/competitions/titanic
 ```
 
-## 两个客户端连接同一服务
+恢复检查主机、工作目录和目录锁，不把活跃运行改成中断。
+操作员也可以用 `python -m sack.reporting import-report` 导入完整验收通过的其他历史报告；
+回执要求 accepted=true、errors=[]、exit_code=0、report_sha256 和 completion_basis。
+该命令不是 MCP 写工具；存在独立验收失败的历史报告应保留其原始失败证据。
 
-WorkBuddy 配置示例，替换地址和私有令牌：
+## 依赖与服务
+
+Python 3.10+，独立安装官方 SDK v1 维护线 mcp==1.28.1，避免升级训练环境：
+
+```bash
+cd /opt/sack-tugraph-runtime-20261015/repo
+python3 -m venv ../mcp-venv
+../mcp-venv/bin/python -m pip install -r requirements-mcp.txt
+```
+
+参考[官方 SDK 文档](https://py.sdk.modelcontextprotocol.io/v1/)。
+环境变量：
+
+- SACK_EXPERIMENT_ROOT：原实验父目录，默认 repo/data/competitions。
+- SACK_REPORT_ROOT：报告历史目录，默认 repo/storage/experiment_reports。
+- SACK_MCP_TOKEN_FILE：包含客户端标签到令牌的 JSON 对象，如 workbuddy、codex。
+- 或用 SACK_MCP_TOKEN 提供单个令牌；令牌至少 24 字符，多客户端令牌不能相同。
+
+令牌文件只读授权给服务账号，例如 root:sackeda、0640，父目录 0750。
+HTTP 没有有效令牌时拒绝启动，所有请求（含初始化）都校验 Authorization。
+Host/Origin 校验保持开启；归档与原实验目录中的符号链接和越界路径被拒绝。
+服务日志记录标签、工具和结果代码，不记录令牌或报告全文。
+令牌权限覆盖配置的整个实验/报告目录，本版未实现按实验分权或 OAuth。
+
+[systemd 配置](../deploy/sack-reports-mcp.service) 使用固定仓库及独立 mcp-venv，
+以 sackeda 运行，ProtectSystem=strict 限制服务写入；流水线进程仍可写入原实验目录。
+默认 HTTP 地址 http://127.0.0.1:8765/mcp。远程连接可用 SSH 转发：
+
+```bash
+ssh -N -L 8765:127.0.0.1:8765 root@60.204.211.83
+```
+
+公网部署需要 HTTPS 网关并设置相应 --allowed-host、--allowed-origin。
+本机代理应把 loopback 加入 NO_PROXY；stdio 使用操作系统/SSH 身份，不需要 HTTP Token。
+
+## 客户端
+
+WorkBuddy 示例（替换令牌）：
 
 ```json
 {
@@ -60,7 +133,9 @@ WorkBuddy 配置示例，替换地址和私有令牌：
 }
 ```
 
-Codex 的 `~/.codex/config.toml`：
+Codex 支持同一 HTTP 地址，或自动通过 SSH 启动原仓库中的 stdio 服务。
+本机已配置的 sack_reports 使用后者及 SSH 保活/重连，启动命令指向上述固定仓库。
+若自行配置 HTTP，可在 ~/.codex/config.toml 中设置：
 
 ```toml
 [mcp_servers.sack_reports]
@@ -68,143 +143,39 @@ url = "http://127.0.0.1:8765/mcp"
 bearer_token_env_var = "SACK_MCP_TOKEN"
 ```
 
-在启动 Codex 的环境中提供对应令牌；桌面应用也需要能够读取该环境变量。
-两个客户端可以同时读取同一 `run_id`，拿到的报告内容及校验值相同。
-配置参考：[WorkBuddy](https://open.workbuddy.cn/docs/connector)、
-[Codex MCP](https://developers.openai.com/codex/mcp)。
+令牌要在 Codex 的运行环境中提供。两个客户端可以同时查询。
+修改启动配置后重启 MCP 连接。参考 [WorkBuddy](https://open.workbuddy.cn/docs/connector)、
+[Codex](https://developers.openai.com/codex/mcp)。
 
-提示语示例：“获取 titanic 实验最近一次成功运行的最终报告，说明对应的运行版本。”
+提示语：“列出 sack_reports 中的实验，并获取 spaceship-titanic 的历史最终报告，说明验收状态。”
 
-## 服务端与网络
+## Git 原地更新与测试
 
-服务器首先监听 loopback。开发或私有部署可使用 SSH 转发：
-
-```bash
-ssh -N -L 8765:127.0.0.1:8765 <服务器SSH别名>
-```
-
-然后两个本地客户端都连接 `http://127.0.0.1:8765/mcp`。
-若本机有 HTTP 代理，应将 loopback 加入 `NO_PROXY`。
-远程客户端无法访问其自身的 localhost 来连接服务器；必须保持隧道或使用可达的 HTTPS 地址。
-
-正式域名部署时，在现有 HTTPS 网关代理 `/mcp`，保留 `Authorization` 和 MCP 请求头，
-允许 POST/GET/DELETE，并将实际域名加入 Host 白名单：
+服务器保留本地部署分支 codex/runtime-inplace，已有运行修复先保存为 Git 检查点，
+再合并功能分支。后续在同一 repo 更新，不创建带日期的项目副本：
 
 ```bash
-python -m sack.mcp --allowed-host sack.example.com --allowed-host '127.0.0.1:*' \
-  --allowed-origin https://sack.example.com
+cd /opt/sack-tugraph-runtime-20261015/repo
+git fetch origin
+git merge --no-edit origin/codex/mcp-experiment-reports
+../mcp-venv/bin/python -m pytest -q tests
+sudo systemctl restart sack-reports-mcp.service
 ```
 
-Host 和 Origin 校验保持开启。服务采用无状态 Streamable HTTP + JSON 响应，
-不共享客户端会话或分页游标。GET 可能按 SDK 行为返回 405，这不代表 POST 工具调用不可用。
-所有 HTTP 请求都验证令牌，包括初始化和工具发现；stdio 不使用 HTTP 令牌。
+部署前确认没有活跃的实验，先处理代码冲突；不要用强制重置覆盖本地改动。
+离线/服务器网络受限时可传输 Git bundle 并 git fetch 该 bundle，再合并同一提交。
+回退使用 Git 检查点或已记录的部署提交，不删除或重新复制实验数据。
 
-仓库提供 [systemd 示例](../deploy/sack-reports-mcp.service)。独立运行用户仅需读取源码、
-归档和令牌，不应能修改归档。服务日志记录客户端标签、工具名及结果代码，不记录令牌和报告全文。
+完整原有回归在训练环境运行：`python -m pytest -q sack/knowledge/tests`。
+新增测试只需 MCP 依赖和 pytest==8.3.5，覆盖原目录发现、无报告任务、历史报告、
+失败重跑、验收失败保留、目录锁、分页、路径安全及真实 HTTP/stdio 双客户端。
 
-## 工具契约
-
-| 工具 | 参数 | 行为 |
-| --- | --- | --- |
-| `list_experiments` | `keyword=""`, `cursor=null`, `limit=20` | 按实验名搜索，返回逐次运行记录；limit 1–100，按 next_cursor 续读 |
-| `get_experiment_status` | `experiment_name`, `run_id=null` | 指定运行或最新运行的状态，同时提供最近成功运行 ID |
-| `get_experiment_report` | `experiment_name`, `run_id=null`, `offset=0`, `max_chars=20000` | 获取已发布 Markdown，最多每页 50000 字符 |
-
-名称精确匹配，支持中文、字母、数字、下划线、点和连字符，长度最多 160，首字符必须为字母、数字或下划线。
-第一版实验名对应现有 `competition` 目录名。列表按 `(experiment_name, run_id)` 排序，游标是最后一条记录的键；
-运行记录可在查询间新增，跨页不是整个目录的事务快照。
-
-不指定 run_id 时获取最近一次成功且已发布的报告；`latest_run` 和 `is_latest_run` 明确指出
-是否有更新的运行正在执行或已经失败。客户端必须展示选中的 run_id，避免把历史结果说成本次结果。
-状态的“成功”表示流水线完成并发布报告，不代表泛化性能、Kaggle 得分或独立外部验收。
-
-报告返回结构化结果及同内容的 JSON 文本，正文在 `content` 字段，原始 Markdown 不改写。
-分页偏移按 Unicode 字符计数。后续页必须复用返回的 `run_id` 和 `next_offset`，
-报告完整校验通过后才返回内容。报告全文上限 8 MiB；图表附件和 PDF 不在本版范围。
-
-工具失败返回 MCP `isError=true`，并提供 `error.code/message`。
-常见代码：`EXPERIMENT_NOT_FOUND`、`RUN_NOT_FOUND`、`REPORT_NOT_READY`、`INVALID_ARGUMENT`、
-`ARTIFACT_MISSING`、`REPORT_INTEGRITY_ERROR`、`UNSAFE_PATH`、`CORRUPT_MANIFEST`。
-认证失败为 HTTP 401；SDK 参数校验错误可能只有文本错误内容。
-
-## 新实验的发布流程
-
-```text
-storage/experiment_reports/<experiment_name>/<run_id>/
-├── manifest.json
-└── research_report.md
-```
-
-`python -m sack run` 和公开 Python 入口 `run_sack_pipeline` 自动记录运行：
-
-1. 取得实验工作目录锁；同目录并发执行被拒绝。
-2. 创建唯一 run_id，原子写入 running 元信息。
-3. 最后阶段 Summarizer 将报告写入本次归档，同时保留原工作目录的 research_report.md。
-4. 整条流水线成功返回，且本次调用确实生成非空报告后，发布 succeeded/report_ready=true 及 SHA-256。
-5. 异常或主动中断记录 failed/interrupted，草稿不对外提供；旧成功版本保持可查。
-
-元信息包含 schema_version、运行状态和 UTC 时间；工作目录/进程信息只用于操作员恢复，不返回给 MCP 客户端。
-文件写入采用同目录临时文件 + 原子替换；MCP 进程不写文件。归档应由可信运行用户维护，
-不接受不可信用户直接修改目录。归档中的符号链接与越界路径会被拒绝。
-
-SIGKILL、断电等无法执行退出处理。确认原进程已退出后，在原服务器上恢复记录：
+部署后的只读验收：
 
 ```bash
-python -m sack.reporting --root /opt/sack-mcp/reports recover-run \
-  --experiment titanic --run-id <run_id> --workspace /path/to/data/competitions/titanic
+../mcp-venv/bin/python scripts/verify_mcp_reports.py \
+  --token-file /opt/sack-tugraph-runtime-20261015/private/mcp-tokens.json --experiment spaceship-titanic
 ```
 
-恢复先验证原工作目录和主机，再尝试非阻塞取得同一锁；活跃的新式运行不会被误判为已中断。
-旧版进程不认识此锁，部署前应让它们结束，避免新旧版本同时操作同一工作目录。
-
-## 历史报告导入
-
-历史导入是操作员命令，不暴露为 MCP 写工具，也不会自动把报告文件存在视为运行成功：
-
-```bash
-python -m sack.reporting --root /opt/sack-mcp/reports import-report \
-  --experiment titanic --report /path/to/research_report.md
-```
-
-无证据时记录为 unknown，不能通过最终报告工具读取。
-核实原运行的完成日志、退出码和验收记录之后，操作员制作与报告哈希绑定的 JSON 回执：
-
-```json
-{
-  "accepted": true,
-  "errors": [],
-  "exit_code": 0,
-  "report_sha256": "<实际报告的SHA256>",
-  "completion_basis": "核对的原始完成日志及验收记录标识"
-}
-```
-
-在导入命令后增加 `--evidence /path/to/receipt.json` 才发布为 succeeded。
-回执是可信操作员的完成声明，导入器验证其结构及哈希绑定，不替代业务验收。
-相同报告与回执重复导入返回同一个历史 run_id；原报告不修改。
-不同历史运行建议使用不同回执，并在 completion_basis 记录原运行标识。
-历史记录的 started_at 使用报告文件 mtime 排序，并返回 timestamp_source=report_mtime；
-它不是已核实的原运行开始时间，completed_at 留空。
-
-## 测试
-
-```bash
-pip install -r requirements-mcp.txt pytest==8.3.5
-python -m pytest -q tests
-```
-
-覆盖真实 stdio/HTTP 协议、双客户端并发、鉴权、Host/Origin 校验、失败重跑、
-分页和历史版本、SHA-256、目录锁、中断恢复、历史证据导入和流水线发布边界。
-双客户端用官方 MCP SDK 模拟各自连接；不等于已操作实际 WorkBuddy/Codex UI。
-原有回归仍可在完整 SACK 环境运行：`python -m pytest -q sack/knowledge/tests`。
-
-对已经部署的 HTTP 服务做只读验收，可运行：
-
-```bash
-python scripts/verify_mcp_reports.py --url http://127.0.0.1:8765/mcp \
-  --token-file /opt/sack-mcp/private/tokens.json --experiment titanic
-```
-
-令牌文件至少提供两个不同客户端的令牌。脚本验证未授权访问被拒绝、三个工具可发现、
-并发客户端读取的报告与发布哈希一致；可用 `--expected-sha256` 再对照原始报告校验。
-本次服务器部署与测试证据见 [2026-11-09 验证记录](../reports/sack-mcp-validation-20261109.md)。
+两个客户端均用官方 SDK 验证，不代表已操作实际客户端界面。
+[首次部署记录](../reports/sack-mcp-validation-20261109.md)描述初始独立副本；后续以本指南固定目录为准。

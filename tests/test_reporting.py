@@ -223,3 +223,11 @@ def test_pipeline_entry_tracks_real_completion_boundary(archive, monkeypatch):
     framework.run_sack_pipeline("titanic", "Data Preparation", "Feature Engineering", "config.json")
     assert calls[0][0] == "titanic"
     assert store.get_report("titanic")["content"] == "# pipeline report"
+
+
+def test_runtime_eda_status_is_created_when_absent_from_checkout(tmp_path):
+    from sack.framework import load_competition_status, save_competition_status
+    path = tmp_path / "competition_process_status.json"
+    assert load_competition_status(path) == {}
+    save_competition_status(path, {"titanic": "success"})
+    assert load_competition_status(path) == {"titanic": "success"}

@@ -49,7 +49,11 @@ def tracked_run(experiment_name: str, workspace: Path, root: str | Path | None =
                         report_ready=False, report_sha256=None, error_code=None, source="pipeline",
                         workspace=str(workspace), host=socket.gethostname(), pid=os.getpid())
         manifest_path = store.path(experiment_name, run_id, "manifest.json")
-        write_manifest(manifest_path, manifest)
+        def persist():
+            write_manifest(manifest_path, manifest)
+            write_manifest(workspace / "run_manifest.json", manifest)
+
+        persist()
         session = dict(store=store, manifest=manifest, workspace=workspace, generated=False)
         token = _CURRENT_RUN.set(session)
         try:
@@ -59,12 +63,12 @@ def tracked_run(experiment_name: str, workspace: Path, root: str | Path | None =
             report = store.read(store.path(experiment_name, run_id, "research_report.md"))
             manifest.update(status="succeeded", completed_at=now(), report_ready=True,
                             report_sha256=hashlib.sha256(report).hexdigest())
-            write_manifest(manifest_path, manifest)
+            persist()
         except BaseException as exc:
             manifest.update(status="interrupted" if isinstance(exc, (KeyboardInterrupt, SystemExit)) else "failed",
                             completed_at=now(), report_ready=False, report_sha256=None,
                             error_code=exc.code if isinstance(exc, ReportError) else type(exc).__name__)
-            write_manifest(manifest_path, manifest)
+            persist()
             raise
         finally:
             _CURRENT_RUN.reset(token)
@@ -130,4 +134,9 @@ def recover_run(store: ReportStore, experiment_name: str, run_id: str, workspace
             manifest.update(status="interrupted", completed_at=now(), report_ready=False,
                             error_code="PROCESS_INTERRUPTED")
             write_manifest(store.path(experiment_name, run_id, "manifest.json"), manifest)
+            current_path = workspace / "run_manifest.json"
+            if current_path.is_file():
+                current = json.loads(store.read(current_path, 64 * 1024))
+                if current.get("run_id") == run_id:
+                    write_manifest(current_path, manifest)
         return store.public(manifest)

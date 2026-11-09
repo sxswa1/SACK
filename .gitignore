@@ -21,6 +21,7 @@ graphdb-home/
 data/
 data_sources/
 storage/
+sack/competition_process_status.json
 
 # Local vector/db artifacts
 sack/LLMComponent/db/
