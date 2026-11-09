@@ -107,6 +107,19 @@ data/eda_competitions/<historical_case_name>/notebooks/
 
 These directories are intentionally not included in this repository.
 
+## Experiment report MCP
+
+Expose completed reports to WorkBuddy, Codex and other MCP clients using the
+read-only service in [the MCP deployment guide](docs/mcp-reports.md). Install
+`requirements-mcp.txt` in a separate Python 3.10+ environment; the service does
+not need the training stack or database credentials. Streamable HTTP supports
+independent concurrent clients; stdio is also available.
+
+New `python -m sack run` executions archive reports by experiment name and run ID.
+Only a successful pipeline return with a report generated in that same run
+publishes a report. Existing experiment outputs need an explicit historical
+import with completion evidence; EDA status alone does not prove completion.
+
 ## Artifact Notes
 
 This release is intended for code inspection, reproducibility review, and independent setup. Large generated assets can be rebuilt from user-provided data with the commands above.

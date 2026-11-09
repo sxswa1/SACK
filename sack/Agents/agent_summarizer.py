@@ -9,6 +9,7 @@ logger.setLevel(logging.INFO)
 from sack.Agents.agent_base import Agent
 from sack.utils import read_file
 from sack.state import State
+from sack.reporting import save_research_report
 from sack.Prompts.prompt_base import *
 from sack.Prompts.prompt_summarizer import *
 
@@ -171,8 +172,7 @@ class Summarizer(Agent): # 阶段性总结工作 为下一个阶段提供见解
         # 最后一个阶段要把所有阶段report都汇总起来 按阶段总结竞赛研究过程 成为一个markdown
         if state.phase == 'Model Building, Validation, and Prediction':
             research_report = self._generate_research_report(state)
-            with open(f'{state.competition_dir}/research_report.md', 'w', encoding='utf-8') as f:
-                f.write(research_report)
+            save_research_report(state.competition_dir, research_report)
 
         # save history
         with open(f'{state.restore_dir}/{self.role}_history.json', 'w', encoding='utf-8') as f:
