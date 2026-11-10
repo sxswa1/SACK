@@ -1,0 +1,92 @@
+{
+  "passed": true,
+  "url": "https://mcp.bdilabagent.cn/sack/mcp",
+  "tls_verified": true,
+  "missing_token": 401,
+  "wrong_token": 401,
+  "invalid_origin": 403,
+  "clients": [
+    {
+      "client": "workbuddy",
+      "tools": 3,
+      "experiments": [
+        "ghouls-goblins-and-ghosts-boo",
+        "house-prices",
+        "house-prices2",
+        "playground-series-s4e2",
+        "spaceship-titanic",
+        "titanic"
+      ],
+      "reports": [
+        {
+          "experiment_name": "ghouls-goblins-and-ghosts-boo",
+          "run_id": "report_3ae1311c419f6a81171afeff",
+          "report_source": "workspace",
+          "report_sha256": "3ae1311c419f6a81171afeffd503373b87ae3222d294ddd457be533f43a88736",
+          "acceptance_passed": false,
+          "eda_status": "fail",
+          "validation_score": 0.7513900709219858
+        },
+        {
+          "experiment_name": "spaceship-titanic",
+          "run_id": "report_f99fca72f39d269b9521817c",
+          "report_source": "workspace",
+          "report_sha256": "f99fca72f39d269b9521817cdc493092c5910ca29fa8b0c70e76d747e0d303e6",
+          "acceptance_passed": true,
+          "eda_status": "success",
+          "validation_score": 0.78205865439908
+        },
+        {
+          "experiment_name": "playground-series-s4e2",
+          "run_id": "report_1dc6f3078e6dea2a5282f9a5",
+          "report_source": "workspace",
+          "report_sha256": "1dc6f3078e6dea2a5282f9a548b842e3abfb4a93e709f06d655fae8140bbbb67",
+          "acceptance_passed": true,
+          "eda_status": "success",
+          "validation_score": 0.8967132540549873
+        }
+      ]
+    },
+    {
+      "client": "codex",
+      "tools": 3,
+      "experiments": [
+        "ghouls-goblins-and-ghosts-boo",
+        "house-prices",
+        "house-prices2",
+        "playground-series-s4e2",
+        "spaceship-titanic",
+        "titanic"
+      ],
+      "reports": [
+        {
+          "experiment_name": "ghouls-goblins-and-ghosts-boo",
+          "run_id": "report_3ae1311c419f6a81171afeff",
+          "report_source": "workspace",
+          "report_sha256": "3ae1311c419f6a81171afeffd503373b87ae3222d294ddd457be533f43a88736",
+          "acceptance_passed": false,
+          "eda_status": "fail",
+          "validation_score": 0.7513900709219858
+        },
+        {
+          "experiment_name": "spaceship-titanic",
+          "run_id": "report_f99fca72f39d269b9521817c",
+          "report_source": "workspace",
+          "report_sha256": "f99fca72f39d269b9521817cdc493092c5910ca29fa8b0c70e76d747e0d303e6",
+          "acceptance_passed": true,
+          "eda_status": "success",
+          "validation_score": 0.78205865439908
+        },
+        {
+          "experiment_name": "playground-series-s4e2",
+          "run_id": "report_1dc6f3078e6dea2a5282f9a5",
+          "report_source": "workspace",
+          "report_sha256": "1dc6f3078e6dea2a5282f9a548b842e3abfb4a93e709f06d655fae8140bbbb67",
+          "acceptance_passed": true,
+          "eda_status": "success",
+          "validation_score": 0.8967132540549873
+        }
+      ]
+    }
+  ]
+}

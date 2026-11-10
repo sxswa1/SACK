@@ -1,0 +1,25 @@
+{
+  "passed": true,
+  "transport": "streamable-http",
+  "client_type": "official-sdk-probe",
+  "unauthorized_status": 401,
+  "invalid_token_status": 401,
+  "clients": [
+    {
+      "client": "workbuddy",
+      "run_id": "legacy_a57f2a83fcce54b70cd3f488",
+      "sha256": "ca9ee45431e5b13e924991bf338730c9e6152f878f2bb937a681c66a4b2fb46f",
+      "chars": 16997,
+      "tools": 3,
+      "status": "succeeded"
+    },
+    {
+      "client": "codex",
+      "run_id": "legacy_a57f2a83fcce54b70cd3f488",
+      "sha256": "ca9ee45431e5b13e924991bf338730c9e6152f878f2bb937a681c66a4b2fb46f",
+      "chars": 16997,
+      "tools": 3,
+      "status": "succeeded"
+    }
+  ]
+}

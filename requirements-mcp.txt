@@ -1,0 +1,4 @@
+# Lightweight MCP service only; do not install the machine-learning requirements.
+# Explicit v1 maintenance-line pin; v2 uses different APIs. Python >= 3.10.
+mcp==1.28.1
+python-dotenv==1.0.1

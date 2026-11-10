@@ -6,6 +6,9 @@ import shutil
 import sys
 from pathlib import Path
 
+from sack.reporting import tracked_run
+from sack.reporting.store import component
+
 from sack.paths import (
     SACK_CONFIG_PATH,
     SACK_STATUS_PATH,
@@ -146,6 +149,24 @@ def save_competition_status(status_file_path: str | Path, status_dict: dict) -> 
 
 
 def run_sack_pipeline(
+    competition: str,
+    eda_start_phase: str,
+    dsp_start_phase: str,
+    config_path: str,
+    skip_eda: bool = False,
+    force_eda: bool = False,
+    working_dir: str | os.PathLike | None = None,
+) -> None:
+    component(competition)
+    workspace = COMPETITION_DATA_DIR / competition
+    with tracked_run(competition, workspace):
+        _run_sack_pipeline(
+            competition, eda_start_phase, dsp_start_phase, config_path,
+            skip_eda=skip_eda, force_eda=force_eda, working_dir=working_dir,
+        )
+
+
+def _run_sack_pipeline(
     competition: str,
     eda_start_phase: str,
     dsp_start_phase: str,
