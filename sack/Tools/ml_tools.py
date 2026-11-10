@@ -1065,46 +1065,66 @@ def train_and_validation_and_select_the_best_model(X, y, problem_type='binary',
     else:
         raise ValueError("Invalid problem_type. Choose from 'binary', 'multiclass', or 'regression'.")
 
+    from sack.tabpfn_support import create_tabpfn, model_details
+
+    if selected_models is None:
+        selected_models = ['XGBoost', 'SVM', 'random forest']
+    unknown = set(selected_models) - set(models) - {'TabPFN'}
+    if unknown:
+        raise ValueError(f'Unknown selected models: {sorted(unknown)}')
+    results, candidates = {}, []
+    for model_name in dict.fromkeys(selected_models):
+        try:
+            if model_name == 'TabPFN':
+                # Check full data size: the eventual winner is refitted on X, y.
+                estimator = create_tabpfn(X, y, problem_type)
+                estimator.fit(X_train, y_train)
+                best_params = {'n_estimators': estimator.n_estimators}
+            else:
+                model, param_grid = models[model_name]
+                optimizer = GridSearchCV(estimator=model, param_grid=param_grid, cv=5, scoring=scoring)
+                optimizer.fit(X_train, y_train)
+                estimator, best_params = optimizer.best_estimator_, optimizer.best_params_
+            y_pred = estimator.predict(X_val)
+            if problem_type in ['binary', 'multiclass']:
+                score = (accuracy_score(y_val, y_pred) if problem_type == 'binary'
+                         else f1_score(y_val, y_pred, average='weighted'))
+            else:
+                score = -mean_squared_error(y_val, y_pred)
+            if not np.isfinite(score):
+                raise ValueError('Validation score is not finite')
+        except Exception as exc:
+            if model_name != 'TabPFN':
+                raise
+            results[model_name] = {'status': 'failed', 'error': f'{type(exc).__name__}: {exc}'}
+            warnings.warn(f'TabPFN candidate skipped: {exc}', RuntimeWarning)
+            continue
+        results[model_name] = {'status': 'validated', 'best_params': best_params,
+                               'score': float(score), 'model_details': model_details(estimator)}
+        candidates.append((float(score), model_name, estimator))
+
+    # If an optional candidate fails during full-data refit, try the next validated model.
     best_model = None
-    best_score = float('-inf')
-    results = {}
-
-    models = {model_name: models[model_name] for model_name in selected_models}
-    # Hyperparameter optimization
-    for model_name, (model, param_grid) in models.items():
-        optimizer = GridSearchCV(estimator=model, param_grid=param_grid, cv=5, scoring=scoring)
-        optimizer.fit(X_train, y_train)
-        print(f"Finished model training: {model_name}")
-
-        # Evaluate the model on the validation set
-        y_pred = optimizer.predict(X_val)
-        if problem_type in ['binary', 'multiclass']:
-            score = accuracy_score(y_val, y_pred) if problem_type == 'binary' else f1_score(y_val, y_pred,
-                                                                                            average='weighted')
-        else:
-            score = -mean_squared_error(y_val, y_pred)
-
-        # Store the results
-        results[model_name] = {
-            'best_params': optimizer.best_params_,
-            'score': score
-        }
-
-        if score > best_score:
-            best_score = score
-            best_model = optimizer.best_estimator_
-
-    # Output results
+    for score, model_name, estimator in sorted(candidates, key=lambda item: item[0], reverse=True):
+        try:
+            estimator.fit(X, y)
+        except Exception as exc:
+            if model_name != 'TabPFN':
+                raise
+            results[model_name].update(status='refit_failed', error=f'{type(exc).__name__}: {exc}')
+            warnings.warn(f'TabPFN full-data refit failed: {exc}', RuntimeWarning)
+            continue
+        best_model, best_score = estimator, score
+        results[model_name]['status'] = 'selected'
+        results[model_name]['model_details'] = model_details(estimator)
+        break
     for model_name, result in results.items():
-        print(f"Model: {model_name}, Best Params: {result['best_params']}, Score: {result['score']}")
-
+        print(f'Model: {model_name}, Result: {result}')
     if best_model is None:
-        raise ValueError('No model was trained successfully')
-    best_model.fit(X, y)
+        raise ValueError(f'No model was trained successfully: {results}')
     from sack.model_audit import record_training
     metric = ('accuracy' if problem_type == 'binary' else
               'f1_weighted' if problem_type == 'multiclass' else 'negative_mse')
     return record_training(best_model, X, y, results, best_score, metric)
-
 # Example usage:
 # best_model, performance_results = select_best_model(X, y, problem_type='classification')

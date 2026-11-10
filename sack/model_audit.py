@@ -35,7 +35,8 @@ class AuditedModel:
     def predict(self, X):
         predictions = self._model.predict(X)
         if self._session.matches_features(X, 'processed_test.csv'):
-            values = [self._mapping.get(label(v), label(v)) for v in predictions]
+            values = ([float(v) for v in predictions] if self._record['problem_type'] == 'regression'
+                      else [self._mapping.get(label(v), label(v)) for v in predictions])
             self._session.predictions.append((self._record, values))
         return predictions
 
@@ -81,6 +82,7 @@ class AuditSession:
     def record_training(self, model, X, y, results, score, metric):
         import math
         import pandas as pd
+        import numpy as np
         raw_train, raw_test, identifier, target = self.source_tables()
         if not self.matches_features(X, 'processed_train.csv') or len(y) != len(raw_train):
             raise ValueError('Audited training requires the full ordered processed_train predictors and target')
@@ -89,7 +91,14 @@ class AuditSession:
             if prepared['id'].tolist() != raw[identifier].tolist():
                 raise ValueError('Processed IDs/row order differ from raw data: ' + filename)
         mapping, forward = {}, {}
-        for transformed, original in zip(y, raw_train[target]):
+        regression = metric == 'negative_mse'
+        if regression:
+            numeric_y = np.asarray(y, dtype=float)
+            original_y = pd.to_numeric(raw_train[target], errors='raise').to_numpy(dtype=float)
+            if not (np.isfinite(numeric_y).all() and np.isfinite(original_y).all()
+                    and np.allclose(numeric_y, original_y, rtol=1e-10, atol=1e-12)):
+                raise ValueError('Audited regression requires original finite numeric targets')
+        for transformed, original in ([] if regression else zip(y, raw_train[target])):
             transformed = label(transformed)
             if ((transformed in mapping and mapping[transformed] != original) or
                     (original in forward and forward[original] != transformed)):
@@ -99,6 +108,7 @@ class AuditSession:
         if not results or not math.isfinite(float(score)):
             raise ValueError('Measured validation results are missing or nonfinite')
         record = {'model_class': type(model).__name__, 'training_rows': len(X),
+                  'problem_type': 'regression' if regression else 'classification',
                   'validation_metric': metric, 'validation_score': float(score),
                   'candidate_results': results, 'full_data_refit': True,
                   'input_sha256': {name: digest(self.task / name) for name in
@@ -109,6 +119,7 @@ class AuditSession:
 
     def verify_submission(self):
         import pandas as pd
+        import numpy as np
         raw_train, raw_test, identifier, target = self.source_tables()
         submission = pd.read_csv(self.task / 'submission.csv', dtype=str, keep_default_na=False)
         if list(submission.columns) not in ([identifier, target], ['id', target]):
@@ -116,10 +127,18 @@ class AuditSession:
         if submission.iloc[:, 0].tolist() != raw_test[identifier].tolist():
             raise ValueError('Submission IDs or row order differ from the original test set')
         values = submission[target].tolist()
-        if not values or not set(values).issubset(set(raw_train[target])):
-            raise ValueError('Submission labels differ from the original training labels')
+        if not values:
+            raise ValueError('Submission predictions are empty')
         for record, predictions in reversed(self.predictions):
-            if values == predictions and all(digest(self.task / name) == expected
+            if record['problem_type'] == 'regression':
+                numeric = pd.to_numeric(submission[target], errors='coerce').to_numpy(dtype=float)
+                matches = (np.isfinite(numeric).all() and np.isfinite(predictions).all()
+                           and np.allclose(numeric, predictions, rtol=1e-7, atol=1e-9))
+            else:
+                if not set(values).issubset(set(raw_train[target])):
+                    raise ValueError('Submission labels differ from the original training labels')
+                matches = values == predictions
+            if matches and all(digest(self.task / name) == expected
                                               for name, expected in record['input_sha256'].items()):
                 return {**record, 'prediction_rows': len(values),
                         'submission_sha256': digest(self.task / 'submission.csv')}

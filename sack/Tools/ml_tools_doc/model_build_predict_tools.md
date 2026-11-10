@@ -18,9 +18,9 @@
 - `selected_models`:
   - **Type:** `list`
   - **Description:** List of model names to consider for selection.
-  - **Default:** `["XGBoost", "SVM", "neural network"]`
-  - **Enum (For binary and multiclass problems):** `["XGBoost", "SVM", "random forest", "decision tree", "logistic regression"]`
-  - **Enum (For regression problems):** `["linear regression", "decision tree", "random forest", "XGBoost", "SVM"]`
+  - **Default:** `["XGBoost", "SVM", "random forest"]`
+  - **Enum (For binary and multiclass problems):** `["XGBoost", "SVM", "random forest", "decision tree", "logistic regression", "TabPFN"]`
+  - **Enum (For regression problems):** `["linear regression", "decision tree", "random forest", "XGBoost", "SVM", "TabPFN"]`
 
 **Required:** `X`, `y`  
 **Result:** The best performing trained model.  
@@ -28,9 +28,15 @@
 **Notes:**
 - Utilizes cross-validation for performance evaluation.
 - Supports binary, multiclass classification, and regression tasks.
-- Employs GridSearchCV for hyperparameter optimization.
+- Employs GridSearchCV for traditional models. TabPFN uses direct fit and the same validation split/metric without a parameter search.
 - Outputs performance scores and best hyperparameters for each model.
 - Requires scikit-learn and relevant model libraries.
+- Optional `TabPFN` requires `pip install -r requirements-tabpfn.txt` (package 2.1.3, original v2 classifier/regressor checkpoints). It is not in the default model list.
+- TabPFN limits apply to the full training set: 1000 rows on CPU, 10000 on CUDA, 500 features and 10 classes. Use the existing processed feature tables and exclude IDs/target.
+- Configure `SACK_TABPFN_DEVICE=auto|cpu|cuda|cuda:<index>`, `SACK_TABPFN_MODEL_DIR`, `SACK_TABPFN_N_ESTIMATORS` (default 4), and `SACK_TABPFN_N_JOBS` (default 1). Weights download on first fit if not cached; pre-download for offline servers.
+- Failed TabPFN candidates are recorded and skipped, including full-data refit failures. Select another candidate too for fallback; if no candidate succeeds, the tool raises an error.
+- Return value is ONE trained model. Use `model.predict` on the ordered processed test DataFrame. The winning estimator is refitted on all training rows.
+- Regression requires original finite numeric targets and predictions; do not encode or log-transform targets in this first integration.
 
 **Example:**
 - **Input:**

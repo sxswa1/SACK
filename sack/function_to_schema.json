@@ -901,8 +901,8 @@
                 "type": "list",
                 "description": "List of model names to consider for selection.",
                 "default": ["XGBoost", "SVM", "random forest"],
-                "enum (for binary and multiclass problems)": ["XGBoost", "SVM", "random forest", "decision tree", "logistic regression"],
-                "enum (for regression problems)": ["linear regression", "decision tree", "random forest", "XGBoost", "SVM"]
+                "enum (for binary and multiclass problems)": ["XGBoost", "SVM", "random forest", "decision tree", "logistic regression", "TabPFN"],
+                "enum (for regression problems)": ["linear regression", "decision tree", "random forest", "XGBoost", "SVM", "TabPFN"]
             }
         },
         "required": ["X", "y"],
@@ -911,9 +911,9 @@
         "notes": [
             "Utilizes cross-validation for performance evaluation.",
             "Supports binary, multiclass classification, and regression tasks.",
-            "Employs GridSearchCV for hyperparameter optimization.",
+            "Employs GridSearchCV for traditional models; optional TabPFN uses direct fit and the same holdout metric.",
             "Outputs performance scores and best hyperparameters for each model.",
-            "Requires scikit-learn and relevant model libraries."
+            "TabPFN requires requirements-tabpfn.txt, pinned v2 weights, at most 1000 CPU rows or 10000 CUDA rows, 500 features and 10 classes. Failed TabPFN candidates are recorded; another selected model can be used as fallback. Regression requires original numeric targets."
         ],
         "example": {
             "input": {
