@@ -3,6 +3,10 @@
 服务直接查询原有实验工作目录，供 WorkBuddy、Codex 按实验名查状态、获取报告。
 支持 Streamable HTTP 和 stdio；查询不运行实验、不调用模型、不连接知识数据库。
 
+公网接入地址：`https://mcp.bdilabagent.cn/sack/mcp`。
+客户端使用 Streamable HTTP 和自己的 Bearer 令牌直接连接，无需 SSH 或本地端口转发。
+详细接入与网关部署见 [公网 MCP 配置](mcp-public.md)。
+
 ## 固定运行目录
 
 服务器统一使用 `/opt/sack-tugraph-runtime-20261015/`，不再按日期复制项目：
@@ -108,7 +112,8 @@ Host/Origin 校验保持开启；归档与原实验目录中的符号链接和�
 
 [systemd 配置](../deploy/sack-reports-mcp.service) 使用固定仓库及独立 mcp-venv，
 以 sackeda 运行，ProtectSystem=strict 限制服务写入；流水线进程仍可写入原实验目录。
-默认 HTTP 地址 http://127.0.0.1:8765/mcp。远程连接可用 SSH 转发：
+进程内部 HTTP 地址为 http://127.0.0.1:8765/mcp，由 Nginx 发布为上述公网 HTTPS 地址。
+本地调试也可使用 SSH 转发：
 
 ```bash
 ssh -N -L 8765:127.0.0.1:8765 root@60.204.211.83
@@ -126,20 +131,18 @@ WorkBuddy 示例（替换令牌）：
   "mcpServers": {
     "sack-reports": {
       "type": "streamableHttp",
-      "url": "http://127.0.0.1:8765/mcp",
+      "url": "https://mcp.bdilabagent.cn/sack/mcp",
       "headers": {"Authorization": "Bearer <WorkBuddy令牌>"}
     }
   }
 }
 ```
 
-Codex 支持同一 HTTP 地址，或自动通过 SSH 启动原仓库中的 stdio 服务。
-本机已配置的 sack_reports 使用后者及 SSH 保活/重连，启动命令指向上述固定仓库。
-若自行配置 HTTP，可在 ~/.codex/config.toml 中设置：
+Codex 使用同一公网 HTTPS 地址，在 ~/.codex/config.toml 中设置：
 
 ```toml
 [mcp_servers.sack_reports]
-url = "http://127.0.0.1:8765/mcp"
+url = "https://mcp.bdilabagent.cn/sack/mcp"
 bearer_token_env_var = "SACK_MCP_TOKEN"
 ```
 

@@ -1,0 +1,42 @@
+name: MCP public HTTPS endpoint
+
+on:
+  push:
+    branches: [codex/mcp-experiment-reports]
+    paths:
+      - deploy/nginx-sack-mcp.location.conf
+      - deploy/sack-reports-mcp-public.conf
+      - .github/workflows/mcp-public-endpoint.yml
+  pull_request:
+    paths:
+      - deploy/nginx-sack-mcp.location.conf
+      - deploy/sack-reports-mcp-public.conf
+      - .github/workflows/mcp-public-endpoint.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-ingress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check trusted TLS and bearer authentication from an external network
+        shell: bash
+        run: |
+          response_headers=$(mktemp)
+          response_status=$(curl --proto '=https' --tlsv1.2 \
+            --silent --show-error --connect-timeout 10 --max-time 25 \
+            --retry 2 --retry-delay 3 --retry-all-errors \
+            --request POST --header 'Content-Type: application/json' --data '{}' \
+            --dump-header "$response_headers" --output /dev/null --write-out '%{http_code}' \
+            https://mcp.bdilabagent.cn/sack/mcp)
+          test "$response_status" = '401'
+          python3 - "$response_headers" <<'PY'
+          from pathlib import Path
+          import sys
+          headers = Path(sys.argv[1]).read_text().lower()
+          assert 'www-authenticate: bearer' in headers, 'Missing bearer authentication challenge'
+          print('Public TLS verified; unauthenticated requests correctly return 401 Bearer.')
+          PY
