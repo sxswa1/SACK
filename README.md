@@ -109,6 +109,9 @@ These directories are intentionally not included in this repository.
 
 ## Experiment report MCP
 
+For client setup, see the [WorkBuddy and Codex configuration guide](docs/mcp-client-setup.md),
+including HTTPS bearer authentication, connection checks and troubleshooting.
+
 Expose completed reports to WorkBuddy, Codex and other MCP clients using the
 read-only service in [the MCP deployment guide](docs/mcp-reports.md). Install
 `requirements-mcp.txt` in a separate Python 3.10+ environment; the service does

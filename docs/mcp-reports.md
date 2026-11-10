@@ -5,7 +5,8 @@
 
 公网接入地址：`https://mcp.bdilabagent.cn/sack/mcp`。
 客户端使用 Streamable HTTP 和自己的 Bearer 令牌直接连接，无需 SSH 或本地端口转发。
-详细接入与网关部署见 [公网 MCP 配置](mcp-public.md)。
+客户端操作见 [WorkBuddy / Codex 配置指南](mcp-client-setup.md)，
+网关部署见 [公网 MCP 配置](mcp-public.md)。
 
 ## 固定运行目录
 
