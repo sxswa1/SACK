@@ -72,7 +72,9 @@ class Reviewer(Agent):
                         "Preserve the original evaluation and score. Use final_score and "
                         f"final_suggestion objects keyed by 'agent {role}'. "
                         "Preserve every critical failure in critical_failures as objects with "
-                        "agent, code and concrete evidence; use [] only if none were identified. "
+                        "the exact keys agent, code, evidence (not 'concrete evidence'); "
+                        "evidence must contain the concrete supporting observation. "
+                        "Use [] only if no critical failures were identified. "
                         "Do not invent a missing score. Return JSON only.\n" + original
                     )
                     raw, _ = self.llm.generate(prompt, history=[], max_completion_tokens=4096)
