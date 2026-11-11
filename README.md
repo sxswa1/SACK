@@ -23,6 +23,10 @@ Create a Python environment and install the repository requirements:
 pip install -r requirements.txt
 ```
 
+For the optional local TabPFN v2 classification/regression candidate, also install
+`requirements-tabpfn.txt`. See [TabPFN setup and validation](docs/tabpfn.md) for
+pinned weights, resource limits, model selection, and the real inference check.
+
 The full knowledge-building and live case-retrieval path additionally requires:
 
 - Java

@@ -353,14 +353,20 @@ It is already imported from Tools.ml_tools by the framework; do not import a
 nonexistent module named train_and_validation_and_select_the_best_model.
 Signature: (X, y, problem_type='binary', selected_models=[...]).
 Supported model names: 'logistic regression', 'decision tree', 'random forest',
-'XGBoost', 'SVM' (regression uses 'linear regression' instead of logistic regression).
+'XGBoost', 'SVM', 'TabPFN' (regression uses 'linear regression' instead of logistic regression).
+TabPFN is optional and uses pinned v2 weights, direct fit/validation without GridSearchCV.
+Select it for small tables within 1000 CPU rows (10000 CUDA rows), 500 features and
+10 classes. Unavailable or failed TabPFN candidates are logged; select another
+candidate as well when fallback is needed.
 Use a concise model selection appropriate to the runtime budget.
 Supply full ordered processed_train.csv predictors as a DataFrame (exclude id and
 target) and the corresponding full target vector. The tool validates and refits
 the best estimator on the full training data, returning ONE model, not a tuple.
 Use model.predict on the ordered processed_test.csv predictor DataFrame with the
 same feature columns. Preserve original test IDs and original target label spelling;
-inverse-transform encoded targets before writing submission.csv. Do not refit the
+inverse-transform encoded classification targets before writing submission.csv.
+For regression, pass original numeric targets and write finite numeric predictions
+without label encoding or target transformations. Do not refit the
 returned model, fabricate metrics, simulate training, or generate placeholder predictions.
 The framework independently verifies training and that submission matches the actual
 model predictions. A printed claim or a pre-existing submission is not sufficient.
