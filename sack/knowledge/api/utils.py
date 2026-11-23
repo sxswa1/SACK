@@ -23,7 +23,6 @@ from sack.knowledge.kg_governor.data_profiling.model.edainsight_profile import E
 
 from sack.knowledge.kg_governor.data_profiling.fine_grained_type_detector import FineGrainedColumnTypeDetector
 
-from sack.knowledge.kg_governor.data_profiling.profile_creators.profile_creator import ProfileCreator
 
 from sack.knowledge.kg_governor.data_global_schema_builder.utils.utils import generate_label
 
@@ -83,6 +82,7 @@ def profile_single_competition(new_comp_path: str) -> Tuple[dict, List[dict]]: #
 
     # --------------------------
 
+    from sack.knowledge.kg_governor.data_profiling.profile_creators.profile_creator import ProfileCreator
     dataset = os.path.basename(new_comp_path)  # 新竞赛名称
 
     overview_file = _find_competition_file(new_comp_path, 'overview.txt')
