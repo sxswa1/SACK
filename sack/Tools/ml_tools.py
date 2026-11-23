@@ -242,7 +242,9 @@ def convert_data_types(data: pd.DataFrame, columns: Union[str, List[str]], targe
         elif target_type == 'float':
             data[column] = pd.to_numeric(data[column], errors='coerce')
         elif target_type == 'str':
-            data[column] = data[column].astype(str)
+            # Keep missing markers visible to imputation and missingness checks.
+            missing = data[column].isna()
+            data[column] = data[column].astype(str).mask(missing, np.nan)
         elif target_type == 'bool':
             data[column] = data[column].astype(bool)
         elif target_type == 'datetime':
