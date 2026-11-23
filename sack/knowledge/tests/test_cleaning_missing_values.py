@@ -26,7 +26,8 @@ def test_string_conversion_preserves_missingness_through_cleaning_and_csv(tmp_pa
     reduced = remove_columns_with_missing_data(converted, thresh=0.5)
     assert 'category' not in reduced.columns
     assert 'number_as_text' in reduced.columns
-    cleaned = fill_missing_values(reduced.copy(), 'number_as_text', method='constant', fill_value='Missing')
+    with pd.option_context('mode.copy_on_write', True):
+        cleaned = fill_missing_values(reduced.copy(), 'number_as_text', method='constant', fill_value='Missing')
     path = tmp_path / 'cleaned.csv'
     cleaned.to_csv(path, index=False)
     roundtrip = pd.read_csv(path)

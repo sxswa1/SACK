@@ -33,17 +33,17 @@ def fill_missing_values(data: pd.DataFrame, columns: Union[str, List[str]], meth
     for column in columns:
         if method == 'auto':
             if pd.api.types.is_numeric_dtype(data[column]):
-                data[column].fillna(data[column].mean(), inplace=True)
+                data[column] = data[column].fillna(data[column].mean())
             else:
-                data[column].fillna(data[column].mode()[0], inplace=True)
+                data[column] = data[column].fillna(data[column].mode()[0])
         elif method == 'mean':
-            data[column].fillna(data[column].mean(), inplace=True)
+            data[column] = data[column].fillna(data[column].mean())
         elif method == 'median':
-            data[column].fillna(data[column].median(), inplace=True)
+            data[column] = data[column].fillna(data[column].median())
         elif method == 'mode':
-            data[column].fillna(data[column].mode()[0], inplace=True)
+            data[column] = data[column].fillna(data[column].mode()[0])
         elif method == 'constant':
-            data[column].fillna(fill_value, inplace=True)
+            data[column] = data[column].fillna(fill_value)
         else:
             raise ValueError("Invalid method. Choose from 'auto', 'mean', 'median', 'mode', or 'constant'.")
 
