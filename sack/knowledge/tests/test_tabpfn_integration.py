@@ -212,3 +212,34 @@ def test_modeling_doc_bypasses_stale_chroma_cache(tmp_path):
     method = load_methods('sack/Tools/retrieve_doc.py', 'RetrieveTool', ['query_tools'])['query_tools']
     tool = SimpleNamespace(doc_path=str(tmp_path))  # no db: cannot accidentally use old vectors
     assert method(tool, 'model selection', 'model_build_predict') == doc.read_text()
+
+
+def test_fast_contexts_cover_all_rows_and_combine_predictions(monkeypatch, tmp_path):
+    contexts = []
+
+    class FakeRegressor:
+        def __init__(self, **options):
+            assert options['device'] == 'cuda:0'
+            assert options['fit_mode'] == 'fit_with_cache'
+            self.inference_config_ = SimpleNamespace(SUBSAMPLE_SAMPLES=None)
+
+        def fit(self, X, target):
+            contexts.append(X['feature'].tolist())
+            self.prediction = target.mean()
+
+        def predict(self, X):
+            return np.full(len(X), self.prediction)
+
+    monkeypatch.setitem(sys.modules, 'tabpfn', SimpleNamespace(TabPFNRegressor=FakeRegressor))
+    monkeypatch.setitem(sys.modules, 'torch', SimpleNamespace(
+        cuda=SimpleNamespace(empty_cache=lambda: None)))
+    X = pd.DataFrame({'feature': range(23)})
+    y = X['feature'] + 1
+    model = support.TabPFNShardedRegressor(tmp_path / 'checkpoint', 'cuda:0', 10, 1, True)
+    model.fit(X, y)
+    prediction = model.predict(X.iloc[:2])
+    assert [len(rows) for rows in contexts] == [8, 8, 7]
+    assert sorted(row for rows in contexts for row in rows) == list(range(23))
+    assert np.allclose(prediction, np.expm1(np.log1p(y).mean()))
+    with pytest.raises(ValueError, match='nonnegative'):
+        model.fit(X, -y)

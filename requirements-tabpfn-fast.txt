@@ -1,0 +1,2 @@
+# Optional GPU regression variant. The v2 and 3.5-Fast packages use separate environments.
+tabpfn==9.2.0

@@ -354,12 +354,7 @@ nonexistent module named train_and_validation_and_select_the_best_model.
 Signature: (X, y, problem_type='binary', selected_models=[...]).
 Supported model names: 'logistic regression', 'decision tree', 'random forest',
 'XGBoost', 'SVM', 'TabPFN' (regression uses 'linear regression' instead of logistic regression).
-TabPFN is optional and uses pinned v2 weights, direct fit/validation without GridSearchCV.
-Select it for tables within the configured full-training limit: by default 1000
-CPU rows or 10000 CUDA rows. With explicit TABPFN_ALLOW_CPU_LARGE_DATASET=1,
-CPU also allows up to 10000 rows. Keep the 500-feature and 10-class boundaries.
-Unavailable or failed TabPFN candidates are logged; select another
-candidate as well when fallback is needed.
+The deployment-specific TabPFN instructions are below.
 Use a concise model selection appropriate to the runtime budget.
 Supply full ordered processed_train.csv predictors as a DataFrame (exclude id and
 target) and the corresponding full target vector. The tool validates and refits
@@ -373,6 +368,22 @@ returned model, fabricate metrics, simulate training, or generate placeholder pr
 The framework independently verifies training and that submission matches the actual
 model predictions. A printed claim or a pre-existing submission is not sufficient.
 '''
+            if os.environ.get('SACK_TABPFN_VARIANT') == 'v3.5-fast':
+                prompt_round1 += (
+                    "\nThe active deployment selects TabPFN-3.5-Fast for regression. "
+                    "Use problem_type='regression' and selected_models=['TabPFN']. "
+                    "Supply the full untransformed regression target and the full ordered "
+                    "processed feature tables. The tool partitions large training tables "
+                    "internally and returns one audited model."
+                )
+            else:
+                prompt_round1 += (
+                    "\nTabPFN uses pinned v2 weights and direct validation without GridSearchCV. "
+                    "Its full-training limits are 1000 CPU rows by default or 10000 CUDA rows, "
+                    "500 features and 10 classes. TABPFN_ALLOW_CPU_LARGE_DATASET=1 permits "
+                    "up to 10000 CPU rows. Select another candidate when fallback is needed."
+                )
+
         return prompt_round1
 
 
