@@ -913,7 +913,7 @@
             "Supports binary, multiclass classification, and regression tasks.",
             "Employs GridSearchCV for traditional models; optional TabPFN uses direct fit and the same holdout metric.",
             "Outputs performance scores and best hyperparameters for each model.",
-            "TabPFN requires requirements-tabpfn.txt, pinned v2 weights, at most 1000 CPU rows or 10000 CUDA rows, 500 features and 10 classes. Failed TabPFN candidates are recorded; another selected model can be used as fallback. Regression requires original numeric targets."
+            "TabPFN requires requirements-tabpfn.txt, pinned v2 weights, at most 1000 CPU rows by default or 10000 CUDA rows, 500 features and 10 classes. An explicit TABPFN_ALLOW_CPU_LARGE_DATASET=1 opt-in permits up to 10000 CPU rows while retaining all pretraining boundaries. Failed TabPFN candidates are recorded; another selected model can be used as fallback. Regression requires original numeric targets."
         ],
         "example": {
             "input": {

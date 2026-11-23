@@ -56,7 +56,11 @@ def create_tabpfn(X, y, problem_type):
         raise ValueError('SACK_TABPFN_DEVICE must be auto, cpu, cuda or cuda:<index>')
     if device.startswith('cuda') and not torch.cuda.is_available():
         raise ValueError('CUDA was requested for TabPFN but is unavailable')
-    limit = 1000 if device == 'cpu' else 10000
+    # Upstream exposes this explicit opt-in for CPU performance, independently
+    # of its 10k-row pretraining boundary. Keep the default CPU guard intact.
+    allow_large_cpu = os.environ.get('TABPFN_ALLOW_CPU_LARGE_DATASET', '').strip().lower() in {
+        '1', 'true', 'yes', 'on', 't', 'y'}
+    limit = 1000 if device == 'cpu' and not allow_large_cpu else 10000
     if len(X) > limit or X.shape[1] > 500:
         raise ValueError(f'TabPFN v2 limit on {device}: {limit} rows and 500 features; '
                          f'got {len(X)} rows and {X.shape[1]} features')
@@ -80,6 +84,8 @@ def create_tabpfn(X, y, problem_type):
         'checkpoint': path.name, 'checkpoint_revision': CHECKPOINTS[kind][1],
         'device': device, 'n_estimators': n_estimators,
         'n_jobs': n_jobs,
+        'allow_cpu_large_dataset': device == 'cpu' and allow_large_cpu,
+        'full_training_row_limit': limit,
     }
     return estimator
 

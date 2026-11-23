@@ -355,8 +355,10 @@ Signature: (X, y, problem_type='binary', selected_models=[...]).
 Supported model names: 'logistic regression', 'decision tree', 'random forest',
 'XGBoost', 'SVM', 'TabPFN' (regression uses 'linear regression' instead of logistic regression).
 TabPFN is optional and uses pinned v2 weights, direct fit/validation without GridSearchCV.
-Select it for small tables within 1000 CPU rows (10000 CUDA rows), 500 features and
-10 classes. Unavailable or failed TabPFN candidates are logged; select another
+Select it for tables within the configured full-training limit: by default 1000
+CPU rows or 10000 CUDA rows. With explicit TABPFN_ALLOW_CPU_LARGE_DATASET=1,
+CPU also allows up to 10000 rows. Keep the 500-feature and 10-class boundaries.
+Unavailable or failed TabPFN candidates are logged; select another
 candidate as well when fallback is needed.
 Use a concise model selection appropriate to the runtime budget.
 Supply full ordered processed_train.csv predictors as a DataFrame (exclude id and

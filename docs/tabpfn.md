@@ -54,8 +54,12 @@ predictions = model.predict(X_test)
 `['TabPFN', 'linear regression']`。返回值是一个模型。
 
 - 沿用现有 processed CSV 特征表，排除 ID 和目标列，训练和测试特征列顺序必须相同。
-- 限制按最终全量拟合数据计算：CPU 最多 1000 行，CUDA 最多 10000 行，最多
+- 限制按最终全量拟合数据计算：CPU 默认最多 1000 行，CUDA 最多 10000 行，最多
   500 个特征，分类最多 10 类。超限不会偷偷采样，也不绕过官方预训练限制。
+- 对已明确选择 CPU 的适量数据任务，可在启动进程前显式设置官方选项
+  `TABPFN_ALLOW_CPU_LARGE_DATASET=1`，将 CPU 行数保护上限提高到 10000。
+  默认保护保持不变；仍使用 `ignore_pretraining_limits=False`，不放宽特征数、
+  类别数及 10000 行预训练边界，不进行隐藏采样。审计记录此开关与实际行数上限。
 - TabPFN 直接拟合，在与其他模型相同的 80/20 划分上验证；传统模型继续执行
   训练子集中的五折 GridSearchCV。二分类比较 accuracy，多分类比较 weighted F1，
   回归比较负 MSE。最终胜出模型在全部训练数据上重新拟合。

@@ -33,6 +33,7 @@ def fake_package(monkeypatch, tmp_path, installed='2.1.3', cuda=False):
     monkeypatch.setenv('SACK_TABPFN_DEVICE', 'auto')
     monkeypatch.delenv('SACK_TABPFN_N_ESTIMATORS', raising=False)
     monkeypatch.delenv('SACK_TABPFN_N_JOBS', raising=False)
+    monkeypatch.delenv('TABPFN_ALLOW_CPU_LARGE_DATASET', raising=False)
 
 
 @pytest.mark.parametrize('problem,filename', [('binary', 'classifier'), ('regression', 'regressor')])
@@ -56,6 +57,36 @@ def test_limits_apply_before_fit_on_full_data(monkeypatch, tmp_path, rows, cols,
     with pytest.raises(ValueError, match=message):
         support.create_tabpfn(X, y, 'multiclass')
     assert not (tmp_path / 'weights').exists()
+
+
+@pytest.mark.parametrize('value', ['1', 'true'])
+@pytest.mark.parametrize('rows', [1460, 10000])
+def test_explicit_large_cpu_opt_in_preserves_pretraining_limits(monkeypatch, tmp_path, value, rows):
+    fake_package(monkeypatch, tmp_path)
+    monkeypatch.setenv('TABPFN_ALLOW_CPU_LARGE_DATASET', value)
+    X, y = pd.DataFrame(np.zeros((rows, 2))), pd.Series(np.arange(rows, dtype=float))
+    model = support.create_tabpfn(X, y, 'regression')
+    assert model.device == 'cpu' and model.ignore_pretraining_limits is False
+    assert model._sack_tabpfn_details['allow_cpu_large_dataset'] is True
+    assert model._sack_tabpfn_details['full_training_row_limit'] == 10000
+    for rows, cols, classes, problem, message in [
+        (10001, 2, 2, 'regression', '10000 rows'),
+        (1460, 501, 2, 'regression', '500 features'),
+        (1460, 2, 11, 'multiclass', '10 classes'),
+    ]:
+        X = pd.DataFrame(np.zeros((rows, cols)))
+        y = pd.Series(np.arange(rows) % classes)
+        with pytest.raises(ValueError, match=message):
+            support.create_tabpfn(X, y, problem)
+
+
+@pytest.mark.parametrize('value', ['0', 'false'])
+def test_disabled_large_cpu_opt_in_keeps_default_guard(monkeypatch, tmp_path, value):
+    fake_package(monkeypatch, tmp_path)
+    monkeypatch.setenv('TABPFN_ALLOW_CPU_LARGE_DATASET', value)
+    X, y = pd.DataFrame(np.zeros((1460, 2))), pd.Series(np.arange(1460, dtype=float))
+    with pytest.raises(ValueError, match='1000 rows'):
+        support.create_tabpfn(X, y, 'regression')
 
 
 def test_missing_and_wrong_package_versions_are_actionable(monkeypatch, tmp_path, table):
