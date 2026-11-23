@@ -171,13 +171,20 @@ def normalize_review(reply: dict, expected_role: str | None = None) -> dict:
             raise ReplyFormatError("Each critical failure must be an object")
         agent = failure.get("agent", "agent " + expected_role if expected_role else "")
         match = re.fullmatch(r"(?:agent[ _])?(reader|planner|developer)", str(agent).lower())
-        if not match or any(not isinstance(failure.get(k), str) or not failure[k].strip()
-                            for k in ("code", "evidence")):
+        # A repair model may spell out the description of the evidence field.
+        # Preserve that evidence and the blocking failure rather than dropping it.
+        evidence_values = [failure[k] for k in ('evidence', 'concrete evidence', 'concrete_evidence')
+                           if k in failure]
+        if evidence_values and any(v != evidence_values[0] for v in evidence_values[1:]):
+            raise ReplyFormatError('Conflicting critical failure evidence fields')
+        evidence = evidence_values[0] if evidence_values else None
+        if (not match or not isinstance(failure.get('code'), str) or not failure['code'].strip()
+                or not isinstance(evidence, str) or not evidence.strip()):
             raise ReplyFormatError("Critical failures need an agent, code and concrete evidence")
         if expected_role and match[1] != expected_role:
             continue
         result["critical_failures"].append({"agent": "agent " + match[1],
-                                             "code": failure["code"], "evidence": failure["evidence"]})
+                                             "code": failure["code"], "evidence": evidence})
     return result
 
 

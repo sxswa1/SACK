@@ -86,6 +86,11 @@ text: {content}
 
     def query_tools(self, query: str, state_name: str='data_cleaning'): # 检索 query 指定的当前阶段工具。
         label = state_name + '_tools.md' # 各阶段可用的工具不同。
+        # This stage has one tool. Serve its current contract directly so existing
+        # Chroma collections cannot hide newly supported model names.
+        if label == 'model_build_predict_tools.md':
+            with open(os.path.join(self.doc_path, label), encoding='utf-8') as source:
+                return source.read()
         # print(self.db.collection.get())
         results = self.db.search_context_with_metadatas(query, label)
         # print(results)

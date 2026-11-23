@@ -19,10 +19,20 @@ class EDAReviewer(Reviewer):
             type=type
         )
 
-    def _get_eda_evaluation_guidance(self, role: str) -> str:
+    def _get_eda_evaluation_guidance(self, role: str, phase: str = '') -> str:
         """Initialize the EDA reviewer."""
         role_key = role.lower()
         guidance = AGENT_EDA_EVALUATION_GUIDANCE.get(role_key,"Evaluate general performance and output quality.")
+        guidance += ("\nEvaluate coverage against the CURRENT phase's schema and the listed available "
+                     "tools only. Do not invent tool names or require outputs belonging to another phase. "
+                     "Critical failures still require specific evidence from the actual plan, code or output.")
+        if phase == 'PEDA Insight Extraction':
+            guidance += ("\nPEDA covers data quality, basic distributions and basic dimensionality. "
+                         "Feature relationships, target associations, complexity and special scenarios "
+                         "are evaluated in IEDA, not required as additional PEDA outputs.")
+        elif phase == 'IEDA Insight Extraction':
+            guidance += ("\nIEDA must cover feature relationships, complexity and special scenarios "
+                         "using its available tools and required structured output fields.")
         return guidance
 
     def _generate_prompt_for_agents(self, state: State) -> List[str]:
@@ -49,7 +59,7 @@ class EDAReviewer(Reviewer):
             result = each_agent_memory["result"]
 
             # 添加EDAInsight特定的评估指导
-            eda_guidance = self._get_eda_evaluation_guidance(role)
+            eda_guidance = self._get_eda_evaluation_guidance(role, state.phase)
 
             prompt_for_agent = PROMPT_REVIEWER_ROUND1_EACH_AGENT_EDA.format(
                 role=role.upper(),

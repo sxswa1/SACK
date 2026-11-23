@@ -60,6 +60,38 @@ def test_model_completion_requires_execution_and_training(evidence, status):
     assert state.score == 0
 
 
+@pytest.mark.parametrize('key', ['concrete evidence', 'concrete_evidence'])
+def test_repaired_evidence_alias_preserves_blocking_failure(key):
+    failure = {'agent': 'agent developer', 'code': 'REQUIRED_STEP_MISSING',
+               key: 'Required output tool was never called in the generated code'}
+    developer = normalize_review({'final_score': {'agent developer': 5},
+                                 'critical_failures': [failure]}, 'developer')
+    planner = normalize_review({'final_score': {'agent planner': 5}}, 'planner')
+    merge = load_methods('sack/Agents/agent_reviewer.py', 'Reviewer', ['_merge_dicts'])['_merge_dicts']
+    result = merge(None, [planner, developer], SimpleNamespace(phase='PEDA Insight Extraction'))
+    assert result['final_score']['agent developer'] == 0
+    assert result['critical_failures'][0]['evidence'] == failure[key]
+
+
+def test_conflicting_evidence_aliases_are_not_silently_resolved():
+    with pytest.raises(ReplyFormatError, match='Conflicting critical failure evidence'):
+        normalize_review({'final_score': {'agent developer': 5}, 'critical_failures': [{
+            'code': 'REQUIRED_STEP_MISSING', 'evidence': 'Tool was omitted',
+            'concrete evidence': 'Tool executed successfully'}]}, 'developer')
+
+
+@pytest.mark.parametrize('phase,expected', [
+    ('PEDA Insight Extraction', 'not required as additional PEDA outputs'),
+    ('IEDA Insight Extraction', 'IEDA must cover feature relationships'),
+])
+def test_eda_reviewer_guidance_respects_current_phase(phase, expected):
+    guidance = load_methods('sack/Agents/eda_agent/eda_reviewer.py', 'EDAReviewer',
+        ['_get_eda_evaluation_guidance'], AGENT_EDA_EVALUATION_GUIDANCE={})['_get_eda_evaluation_guidance']
+    text = guidance(None, 'developer', phase)
+    assert expected in text
+    assert 'Do not invent tool names' in text
+
+
 def test_reader_has_its_own_required_score_and_failures_require_evidence():
     state = SimpleNamespace(phase='Understand Background', memory=[{'reviewer': {'score': {'agent reader': 4}}}])
     load_methods('sack/state.py', 'State', ['set_score'])['set_score'](state)
