@@ -245,40 +245,31 @@ class TestTool:  # 所有单元测试函数都定义在这里。
         
 
     def test_processed_train_feature_number(self, state: State):
-        def get_categorical_nunique_formatted(dataframe):
-            categorical_columns = dataframe.select_dtypes(include=['object', 'category', 'bool']).columns
-            nunique_counts = dataframe[categorical_columns].nunique().sort_values(ascending=False)
-            formatted_output = "\n".join([f"{feature}    number of unique values: {count}" for feature, count in nunique_counts.items()])
-            return formatted_output
+        directory = Path(state.competition_dir)
+        processed_columns = pd.read_csv(directory / 'processed_train.csv', nrows=0).columns
+        cleaned_path = directory / 'cleaned_train.csv'
+        cleaned_columns = pd.read_csv(cleaned_path, nrows=0).columns
+        submission_columns = pd.read_csv(directory / 'sample_submission.csv', nrows=0).columns
+        if not set(processed_columns) - set(submission_columns):
+            return False, 15, (
+                'No predictor columns remain after feature selection. Preserve at least one real predictor, '
+                'excluding IDs and targets. Feature selection tools return feature names in the '
+                '"feature" column. Their output column names are not the selected predictors.'
+            )
 
-        path = f"{state.competition_dir}/processed_train.csv"
-        df = pd.read_csv(path)
-        path_to_origin_train = f"{state.competition_dir}/cleaned_train.csv"
-        df_origin = pd.read_csv(path_to_origin_train)
-        sample = pd.read_csv(f"{state.competition_dir}/sample_submission.csv", nrows=0)
-        predictors = set(df.columns) - set(sample.columns)
-        if not predictors:
-            return False, 15, "No predictor columns remain after feature selection. Preserve at least one real predictor, excluding IDs and targets. Feature selection tools return feature names in the 'feature' column; their output column names are not the selected predictors."
-        result = "Valid"
-        if (len(df.columns) <= 3 * len(df_origin.columns) or len(df.columns) <= 50) and result == "Valid":  # 不能引入太多新特征
-            return True, 15, f"The feature engineering phase is well performed."
-        else:
-            false_info = "There are too many features after handling features in the feature engineering phase."
-            false_info += f'''processed_train.csv is the processed data of cleaned_train.csv after feature engineering.
-During the feature engineering phase, improper feature handling has resulted in an excessive number of features. 
-One possible reason is that during the feature processing, certain categorical features (such as brand, transmission, etc.) have too many categories, leading to a large number of features being generated after one-hot encoding.
+        limit = max(3 * len(cleaned_columns), 50)
+        count = len(processed_columns)
+        if count <= limit:
+            return True, 15, f'Processed training columns are within the limit ({count}/{limit}).'
 
-Here is the information about the categorical features of cleaned_train.csv and their unique value counts:
-Categorical features of cleaned_train.csv and their unique value counts:
-{get_categorical_nunique_formatted(df_origin)}
-
-Here is the information about the features of cleaned_train.csv:
-{df_origin.columns}
-
-Here is the information about the features of processed_train.csv:
-{df.columns}
-'''
-            return False, 15, false_info
+        original = pd.read_csv(cleaned_path)
+        cardinalities = original.select_dtypes(include=['object', 'category', 'bool']).nunique()
+        return False, 15, (
+            f'Processed training has {count} columns. The limit is {limit}, including IDs and targets. '
+            'Remove redundant derived features and keep required categorical encodings.\n'
+            f'Cleaned feature names: {list(cleaned_columns)}\n'
+            f'Cleaned categorical cardinalities:\n{cardinalities.sort_values(ascending=False).to_string()}'
+        )
 
     def test_processed_test_feature_number(self, state: State):
         def get_categorical_nunique_formatted(dataframe):

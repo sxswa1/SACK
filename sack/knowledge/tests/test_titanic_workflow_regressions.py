@@ -439,6 +439,20 @@ def test_cleaning_acceptance_detects_clipped_or_reordered_targets(tmp_path, valu
     assert result[0] is passed
 
 
+@pytest.mark.parametrize('count,passed', [(50, True), (51, False)])
+def test_feature_acceptance_reports_the_actual_width_and_limit(tmp_path, count, passed):
+    (tmp_path / 'cleaned_train.csv').write_text('id,amount,category\n1,3.5,A\n')
+    (tmp_path / 'sample_submission.csv').write_text('id,amount\n2,0\n')
+    predictors = ','.join(f'feature_{i}' for i in range(count - 2))
+    (tmp_path / 'processed_train.csv').write_text(f'id,amount,{predictors}\n')
+    methods = load_methods('sack/Tools/unit_test.py', 'TestTool', ['test_processed_train_feature_number'], pd=pd)
+    state = SimpleNamespace(competition_dir=str(tmp_path))
+    result = methods['test_processed_train_feature_number'](None, state)
+    assert result[0] is passed
+    if not passed:
+        assert '51 columns' in result[2] and 'limit is 50' in result[2]
+
+
 @pytest.mark.parametrize('fix_reply', ['I cannot provide corrected code.', '```python\n  \n```'])
 def test_debug_reply_without_code_requests_bounded_regeneration(tmp_path, fix_reply):
     prompts = {}

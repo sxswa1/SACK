@@ -107,11 +107,15 @@ class State:
             return ("In this phase, you have `cleaned_train.csv` and `cleaned_test.csv`. Your goals are:\n"
                     "1. Create new features based on insights from the In-depth EDA.\n"
                     "2. Transform existing features to improve model performance.\n"
-                    "3. Handle categorical variables (e.g., encoding).\n"
+                    "3. Encode categorical predictors before removing their original columns.\n"
+                    "   Fit category mappings on training features only and handle unseen categories explicitly.\n"
+                    "   Use label-independent encodings here. Target-based preprocessing belongs inside the modeling split.\n"
                     "4. Normalize or standardize numerical features if necessary.\n"
                     "5. Select the most relevant features for modeling if necessary.\n"
                     "6. Other necessary feature engineering steps.\n"
                     "7. Create `processed_train.csv` and `processed_test.csv`.\n"
+                    "   The processed training table must have at most max(3 * cleaned training column count, 50) columns.\n"
+                    "   Count IDs and targets in that limit. Prefer removing redundant derived features over dropping required encodings.\n"
                     "Output: Processed datasets (processed_train.csv and processed_test.csv).")
 
         elif self.phase == 'Model Building, Validation, and Prediction':
