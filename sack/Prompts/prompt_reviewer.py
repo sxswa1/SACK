@@ -64,6 +64,7 @@ with agent, code, and concrete code/output evidence when any of these occurs:
   skipped, simulated or claimed complete without execution evidence.
 - EXECUTION_FAILED: the current code execution or required tests failed.
 - DATA_INTEGRITY: target labels, test IDs or row alignment are corrupted.
+- DATA_LEAKAGE: statistics or mappings fitted on test rows are used for training or validation, or validation targets were used to build predictors.
 Do not infer success from printed claims or the existence of an output file alone.
 Check the supplied execution evidence. An explicitly labelled random baseline,
 fixed seed, stochastic model, or legitimate not-applicable statistic is not fabrication.

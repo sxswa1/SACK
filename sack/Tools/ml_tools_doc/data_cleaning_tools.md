@@ -43,7 +43,7 @@
   - **Description:** A pandas DataFrame object representing the dataset.
 - `thresh`:
   - **Type:** `number`
-  - **Description:** The minimum proportion of missing values required to drop a column. Should be between 0 and 1.
+  - **Description:** Drop a column when its missing fraction is strictly greater than this threshold. Should be between 0 and 1.
   - **Default:** `0.5`
 - `columns`:
   - **Type:** ``string` | `array` | `null``
