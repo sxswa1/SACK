@@ -453,6 +453,37 @@ def test_feature_acceptance_reports_the_actual_width_and_limit(tmp_path, count, 
         assert '51 columns' in result[2] and 'limit is 50' in result[2]
 
 
+@pytest.mark.parametrize('complete', [True, False])
+def test_research_report_preserves_all_stage_reports_after_truncation(tmp_path, complete):
+    phases = ('pre_eda', 'data_cleaning', 'deep_eda', 'feature_engineering', 'model_build_predict')
+    for phase in phases:
+        folder = tmp_path / phase
+        folder.mkdir()
+        (folder / 'report.txt').write_text(f'Verified details for {phase}.')
+    full = (
+        '# Competition study\n\n## 1. PRELIMINARY EDA\nInitial results.\n'
+        '## 2. DATA CLEANING\nCleaning results.\n## 3. DEEP EDA\nAnalysis.\n'
+        '## 4. FEATURE ENGINEERING\nFeature results.\n'
+        '## 5. MODEL BUILDING, VALIDATION, AND PREDICTION\nModel results.\n'
+        '## 6. CONCLUSION\nDone.\n<!-- end of report -->'
+    )
+    responses = iter(['Send reports', full if complete else full.split('## 4.')[0]])
+    method = load_methods(
+        'sack/Agents/agent_summarizer.py', 'Summarizer', ['_generate_research_report'],
+        read_file=lambda path: Path(path).read_text(),
+        PROMPT_SUMMARIZER_RESEARCH_REPORT='Summarize the reports.',
+    )['_generate_research_report']
+    summarizer = SimpleNamespace(
+        llm=SimpleNamespace(generate=lambda *args, **kwargs: (next(responses), [])),
+        _parse_markdown=lambda result: result,
+    )
+    report = method(summarizer, SimpleNamespace(competition_dir=str(tmp_path)))
+    if complete:
+        assert 'Model results.' in report and '<!-- end of report -->' not in report
+    else:
+        assert all(f'Verified details for {phase}.' in report for phase in phases)
+
+
 @pytest.mark.parametrize('fix_reply', ['I cannot provide corrected code.', '```python\n  \n```'])
 def test_debug_reply_without_code_requests_bounded_regeneration(tmp_path, fix_reply):
     prompts = {}

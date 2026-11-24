@@ -79,23 +79,39 @@ class Summarizer(Agent): # 阶段性总结工作 为下一个阶段提供见解
 
         return insight_from_visualization
 
-    def _generate_research_report(self, state: State) -> str: # 汇总各阶段报告，形成竞赛研究报告。
-        previous_dirs = ['pre_eda', 'data_cleaning', 'deep_eda', 'feature_engineering', 'model_build_predict']
-        previous_report = ""
-        for dir in previous_dirs:
-            if os.path.exists(f'{state.competition_dir}/{dir}/report.txt'):
-                with open(f'{state.competition_dir}/{dir}/report.txt', 'r', encoding='utf-8') as f:
-                    report = f.read()
-                    previous_report += f"## {dir.replace('_', ' ').upper()} ##\n{report}\n"
-        # Round 0：请求各阶段报告，并明确汇总的格式要求。
-        _, research_report_history = self.llm.generate(PROMPT_SUMMARIZER_RESEARCH_REPORT, [], max_completion_tokens=4096)
-        # Round 1：读取报告并开始汇总，最终输出 Markdown。
-        raw_research_report, research_report_history = self.llm.generate(previous_report, research_report_history, max_completion_tokens=4096)
+    def _generate_research_report(self, state: State) -> str:
+        phases = (
+            ('pre_eda', 'PRELIMINARY EDA'),
+            ('data_cleaning', 'DATA CLEANING'),
+            ('deep_eda', 'DEEP EDA'),
+            ('feature_engineering', 'FEATURE ENGINEERING'),
+            ('model_build_predict', 'MODEL BUILDING, VALIDATION, AND PREDICTION'),
+        )
+        reports = {}
+        for directory, heading in phases:
+            path = os.path.join(state.competition_dir, directory, 'report.txt')
+            if os.path.isfile(path):
+                report = read_file(path).strip()
+                if report:
+                    reports[heading] = report
+        if not reports:
+            raise ValueError('No phase reports are available for the research report.')
+
+        phase_sections = '\n\n'.join(f'## {title}\n\n{report}' for title, report in reports.items())
+        _, history = self.llm.generate(PROMPT_SUMMARIZER_RESEARCH_REPORT, [], max_completion_tokens=4096)
+        raw_report, _ = self.llm.generate(phase_sections, history, max_completion_tokens=4096)
         try:
-            research_report = self._parse_markdown(raw_research_report)
-        except Exception as e:
-            research_report = raw_research_report
-        return research_report
+            summary = self._parse_markdown(raw_report).strip()
+        except (AttributeError, ValueError):
+            summary = (raw_report or '').strip()
+
+        end_marker = '<!-- end of report -->'
+        headings = set(re.findall(r'^##\s+(?:[0-9]+\.\s+)?([^\n]+?)\s*$', summary, re.MULTILINE))
+        if summary.endswith(end_marker) and set(reports).issubset({heading.upper() for heading in headings}):
+            return summary.removesuffix(end_marker).rstrip() + '\n'
+
+        logger.warning('Research summary was incomplete. Preserving the source phase reports.')
+        return '# Competition research report\n\n' + phase_sections + '\n'
 
     def _execute(self, state: State, role_prompt: str) -> Dict[str, Any]:# 以自问自答的方式进行阶段性全面总结，目的是为下一阶段工作提出指导（特别是下一个阶段的planner） 起到阶段过渡作用
         # implement the summarizing function, read the current state's memory and generate report
