@@ -17,7 +17,7 @@ logger.setLevel(logging.INFO)
 from sack.Agents.agent_base import Agent
 from sack.utils import read_file
 from sack.state import State
-from sack.runtime_support import extract_stage_body, strip_stage_output, validate_eda_tool_keywords, ToolCallError
+from sack.runtime_support import extract_stage_body, strip_stage_output, validate_tool_keywords, ToolCallError
 from sack.model_config import get_model
 from sack.paths import SACK_PACKAGE_DIR
 from sack.Prompts.prompt_base import *
@@ -149,9 +149,9 @@ class Developer(Agent):
             with open(path_to_run_code, encoding='utf-8') as source:
                 script = source.read()
                 compile(script, path_to_run_code, 'exec')
-            if state.phase in ('PEDA Insight Extraction', 'IEDA Insight Extraction'):
-                with open(SACK_PACKAGE_DIR / 'Tools/eda_tools.py', encoding='utf-8') as tools:
-                    validate_eda_tool_keywords(script, tools.read())
+            for module in ('eda_tools', 'ml_tools'):
+                with open(SACK_PACKAGE_DIR / 'Tools' / f'{module}.py', encoding='utf-8') as tools:
+                    validate_tool_keywords(script, tools.read(), module)
         except (SyntaxError, ToolCallError) as exc:
             error_message = (f"Assembled code syntax error at line {exc.lineno}: {exc.msg}"
                              if isinstance(exc, SyntaxError) else str(exc))

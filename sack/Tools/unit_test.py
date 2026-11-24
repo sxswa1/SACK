@@ -1,4 +1,5 @@
 ﻿import os
+from pathlib import Path
 import pandas as pd
 import json
 import chromadb
@@ -316,22 +317,26 @@ Here is the information about the features of processed_test.csv:
             return False, 16, false_info
 
     def test_cleaned_train_no_missing_target(self, state: State):
-        # read train.csv and test.csv
-        path_train = f"{state.competition_dir}/train.csv"
-        path_test = f"{state.competition_dir}/test.csv"
-        path_cleaned_train = f"{state.competition_dir}/cleaned_train.csv"
-        
-        train_columns = pd.read_csv(path_train).columns
-        test_columns = pd.read_csv(path_test).columns
-        target_columns = [col for col in train_columns if col not in test_columns]
+        directory = Path(state.competition_dir)
+        train_path = directory / 'train.csv'
+        test_columns = pd.read_csv(directory / 'test.csv', nrows=0).columns
+        cleaned_path = directory / 'cleaned_train.csv'
+        target_columns = [name for name in pd.read_csv(train_path, nrows=0).columns
+                          if name not in test_columns]
+        cleaned_columns = pd.read_csv(cleaned_path, nrows=0).columns
+        if not set(target_columns).issubset(cleaned_columns):
+            return False, 17, f'The cleaned training file must include the original targets {target_columns}.'
 
-        # check if the target column is in the cleaned_train.csv
-        df = pd.read_csv(path_cleaned_train)
-        if all(col in df.columns for col in target_columns):
-            return True, 17, "The target columns are in the cleaned_train.csv file, please continue to the next step of the process"
-        else:
-            return False, 17, f"The target columns {target_columns} are not in the cleaned_train.csv file, please reprocess it"
-        
+        original = pd.read_csv(train_path, usecols=target_columns)[target_columns]
+        cleaned = pd.read_csv(cleaned_path, usecols=target_columns)[target_columns]
+        try:
+            pd.testing.assert_frame_equal(
+                cleaned, original, check_dtype=False, check_exact=False, rtol=1e-12, atol=1e-12
+            )
+        except AssertionError:
+            return False, 17, 'Data cleaning changed training target values or their row order.'
+        return True, 17, 'The cleaned training file preserves the original target values.'
+
     def test_cleaned_test_no_target_column(self, state: State):
         # read train.csv and test.csv
         path_train = f"{state.competition_dir}/train.csv"

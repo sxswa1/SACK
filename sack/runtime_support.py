@@ -17,14 +17,15 @@ class ToolCallError(ValueError):
     """Generated code calls a predefined tool with unsupported arguments."""
 
 
-def validate_eda_tool_keywords(script: str, tool_source: str) -> None:
+def validate_tool_keywords(script: str, tool_source: str, module: str) -> None:
     """Check explicit keywords against source signatures without loading models."""
     tools = {node.name: node for node in ast.parse(tool_source).body
              if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
     tree = ast.parse(script)
     imported = {}
+    tool_modules = {f'Tools.{module}', f'sack.Tools.{module}'}
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module in ('Tools.eda_tools', 'sack.Tools.eda_tools'):
+        if isinstance(node, ast.ImportFrom) and node.module in tool_modules:
             for alias in node.names:
                 if alias.name in tools:
                     imported[alias.asname or alias.name] = alias.name
@@ -41,7 +42,7 @@ def validate_eda_tool_keywords(script: str, tool_source: str) -> None:
         unsupported = [kw.arg for kw in node.keywords if kw.arg is not None and kw.arg not in accepted]
         if unsupported:
             raise ToolCallError(
-                f"EDA tool {name} at line {node.lineno} does not accept keywords {unsupported}. "
+                f"Tool {name} at line {node.lineno} does not accept keywords {unsupported}. "
                 f"Supported keywords: {sorted(accepted)}. Fix the call; do not catch and skip it.")
 
 
