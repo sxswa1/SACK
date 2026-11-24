@@ -35,3 +35,12 @@ def test_string_conversion_preserves_missingness_through_cleaning_and_csv(tmp_pa
     assert roundtrip.id.tolist() == original_ids.tolist()
     assert roundtrip.SalePrice.tolist() == original_target.tolist()
     assert roundtrip.number_as_text.tolist() == ['1.0', '2.0', 'Missing', '4.0']
+
+
+def test_type_conversion_rejects_duplicate_identifier_before_modifying_columns():
+    import pytest
+
+    data = pd.DataFrame([['1', '2', '3']], columns=['feature', 'id', 'id'])
+    with pytest.raises(ValueError, match="Duplicates: \\['id'\\]"):
+        convert_data_types(data, ['feature', 'id'], 'int')
+    assert data.loc[0, 'feature'] == '1'

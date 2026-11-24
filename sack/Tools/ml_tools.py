@@ -230,6 +230,10 @@ def convert_data_types(data: pd.DataFrame, columns: Union[str, List[str]], targe
     Returns:
         pd.DataFrame: The DataFrame with converted data types.
     """
+    if not data.columns.is_unique:
+        duplicates = data.columns[data.columns.duplicated()].unique().tolist()
+        raise ValueError(f"Data type conversion requires unique column labels. Duplicates: {duplicates}")
+
     if isinstance(columns, str):
         columns = [columns]
 
