@@ -217,7 +217,7 @@ def test_audit_rejects_changed_predictors_before_fitting(monkeypatch, tmp_path):
         train(X.astype('float32'), y, problem_type='regression', selected_models=['TabPFN'])
 
 
-def test_configured_rmsle_is_measured_and_audited(monkeypatch, tmp_path):
+def test_configured_rmsle_is_measured_and_audited(monkeypatch, tmp_path, capsys):
     from sklearn.dummy import DummyRegressor
     from sklearn.model_selection import train_test_split
 
@@ -238,6 +238,7 @@ def test_configured_rmsle_is_measured_and_audited(monkeypatch, tmp_path):
     assert receipt['problem_type'] == 'regression'
     assert receipt['validation_metric'] == 'negative_rmsle'
     assert receipt['validation_score'] == pytest.approx(-expected)
+    assert '20% holdout (12 rows), random_state=42' in capsys.readouterr().out
 
     candidate.constant_[:] = -0.5
     sample['target'] = model.predict(test[['x']])

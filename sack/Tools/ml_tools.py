@@ -1006,7 +1006,10 @@ def train_and_validation_and_select_the_best_model(X, y, problem_type='binary',
 
     check_training_inputs(X, y)
     # Split data into training and validation sets
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+    holdout_fraction, split_seed = 0.2, 42
+    X_train, X_val, y_train, y_val = train_test_split(
+        X, y, test_size=holdout_fraction, random_state=split_seed
+    )
 
     # Define models and their hyperparameter grids
     if problem_type in ['binary', 'multiclass']:
@@ -1135,6 +1138,7 @@ def train_and_validation_and_select_the_best_model(X, y, problem_type='binary',
         results[model_name]['status'] = 'selected'
         results[model_name]['model_details'] = model_details(estimator)
         break
+    print(f'Validation protocol: {holdout_fraction:.0%} holdout ({len(X_val)} rows), random_state={split_seed}')
     print(f'Validation metric: {metric} (higher is better)')
     for model_name, result in results.items():
         print(f'Model: {model_name}, Result: {result}')
