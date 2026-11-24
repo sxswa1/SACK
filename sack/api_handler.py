@@ -32,8 +32,10 @@ class APISettings:
 
     @property
     def timeout(self) -> int:
-        # return (self.max_completion_tokens // 1000 + 1) * 30
-        return (self.max_completion_tokens // 100 + 1) * 30
+        seconds = int(os.environ.get("SACK_API_TIMEOUT_SECONDS", "600"))
+        if seconds <= 0:
+            raise ValueError("SACK_API_TIMEOUT_SECONDS must be a positive integer")
+        return seconds
 
 def load_api_config() -> Tuple[str, Optional[str],Optional[str], Optional[str]]:
     try:
@@ -109,6 +111,7 @@ class APIHandler:
         self.client = openai.OpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
+            max_retries=0,  # get_output owns the retry budget.
             http_client=httpx.Client(verify=False)
         )
 
