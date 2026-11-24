@@ -234,6 +234,19 @@ def test_configured_rmsle_is_measured_and_audited(monkeypatch, tmp_path):
         session.verify_submission()
 
 
+def test_model_plan_respects_deployed_tabpfn_candidate_and_metric(monkeypatch):
+    from sack.state import State
+
+    state = State('Model Building, Validation, and Prediction', 'generic-regression', use_mode='DSPipeline')
+    monkeypatch.delenv('SACK_TABPFN_VARIANT', raising=False)
+    assert 'maximum of five candidate models' in state.get_state_info()
+    monkeypatch.setenv('SACK_TABPFN_VARIANT', 'v3.5-fast')
+    monkeypatch.setenv('SACK_REGRESSION_METRIC', 'rmsle')
+    instructions = state.get_state_info()
+    assert "selected_models=['TabPFN']" in instructions
+    assert '20% holdout' in instructions and 'RMSLE' in instructions
+
+
 def test_modeling_doc_bypasses_stale_chroma_cache(tmp_path):
     from sack.knowledge.tests.test_titanic_workflow_regressions import load_methods
     doc = tmp_path / 'model_build_predict_tools.md'

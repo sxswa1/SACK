@@ -119,7 +119,7 @@ class State:
                     "Output: Processed datasets (processed_train.csv and processed_test.csv).")
 
         elif self.phase == 'Model Building, Validation, and Prediction':
-            return ("In this phase, you have `processed_train.csv` and `processed_test.csv`. "
+            modeling ("In this phase, you have `processed_train.csv` and `processed_test.csv`. "
                     "You should first train a model on the training set and then make predictions on the test set.\n"
                     "Before training the model:\n"
                     "1. For the training set, separate the target column as y.\n"
@@ -127,7 +127,18 @@ class State:
                     "Before making predictions:\n"
                     "1. For the test set, remove the same columns that were removed from the training set (except the target column, which is not present in the test set).\n"
                     "2. Ensure consistency between the columns used in training and prediction.\n"
-                    "Due to computational resource limitations, you are allowed to train a maximum of **five** models")
+                    "Use the validation metric configured in the training tool.\n")
+            if os.environ.get('SACK_REGRESSION_METRIC', 'mse').strip().lower() == 'rmsle':
+                modeling += "Regression validation uses RMSLE. The training audit stores its negative for model selection.\n"
+            if os.environ.get('SACK_TABPFN_VARIANT') == 'v3.5-fast':
+                return modeling + (
+                    "The active deployment uses TabPFN-3.5-Fast on CUDA as its only regression candidate. "
+                    "Call the predefined training tool once with selected_models=['TabPFN'] and pass all "
+                    "ordered predictors and original target values. The tool performs a fixed 20% holdout, "
+                    "refits on all rows through disjoint contexts, and returns the selected model. "
+                    "Plan this single audited execution without an extra sweep, cross-validation, or fallback."
+                )
+            return modeling + "Train a maximum of five candidate models within the available resources."
 
         elif self.phase == "PEDA Insight Extraction":
             return ("In this phase, you have `train.csv` and `test.csv`. Your goals are:\n"
