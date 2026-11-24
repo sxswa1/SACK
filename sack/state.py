@@ -119,7 +119,7 @@ class State:
                     "Output: Processed datasets (processed_train.csv and processed_test.csv).")
 
         elif self.phase == 'Model Building, Validation, and Prediction':
-            modeling ("In this phase, you have `processed_train.csv` and `processed_test.csv`. "
+            modeling = ("In this phase, you have `processed_train.csv` and `processed_test.csv`. "
                     "You should first train a model on the training set and then make predictions on the test set.\n"
                     "Before training the model:\n"
                     "1. For the training set, separate the target column as y.\n"
