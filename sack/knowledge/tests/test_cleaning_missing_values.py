@@ -44,3 +44,14 @@ def test_type_conversion_rejects_duplicate_identifier_before_modifying_columns()
     with pytest.raises(ValueError, match="Duplicates: \\['id'\\]"):
         convert_data_types(data, ['feature', 'id'], 'int')
     assert data.loc[0, 'feature'] == '1'
+
+
+
+def test_default_missing_value_rules_render_the_same_fraction_and_percentage(tmp_path):
+    from sack.state import State
+
+    for phase in ('Preliminary Exploratory Data Analysis', 'Data Cleaning'):
+        state = State(phase, 'example', use_mode='DSPipeline')
+        state.restore_dir = tmp_path
+        rules = state.generate_rules()
+        assert 'fraction of rows with missing values exceeds 0.5 on a 0-to-1 scale (0.5 means 50%)' in rules
