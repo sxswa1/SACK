@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import numpy as np
 from typing import Dict, Any, Union, List
@@ -981,7 +982,11 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, Grad
     GradientBoostingRegressor
 from sklearn.svm import SVC, SVR
 from sklearn.neural_network import MLPClassifier, MLPRegressor
-from sklearn.metrics import f1_score, mean_squared_error, accuracy_score
+from sklearn.metrics import accuracy_score, f1_score, make_scorer, mean_squared_error, mean_squared_log_error
+
+
+def _root_mean_squared_log_error(y_true, y_pred):
+    return np.sqrt(mean_squared_log_error(y_true, y_pred))
 
 
 def train_and_validation_and_select_the_best_model(X, y, problem_type='binary',
@@ -1040,6 +1045,7 @@ def train_and_validation_and_select_the_best_model(X, y, problem_type='binary',
             })
         }
         scoring = 'accuracy' if problem_type == 'binary' else 'f1_weighted'
+        metric = scoring
     elif problem_type == 'regression':
         models = {
             'linear regression': (LinearRegression(), {
@@ -1067,7 +1073,18 @@ def train_and_validation_and_select_the_best_model(X, y, problem_type='binary',
                 'gamma': ['scale', 'auto']
             })
         }
-        scoring = 'neg_mean_squared_error'
+        regression_metric = os.environ.get('SACK_REGRESSION_METRIC', 'mse').strip().lower()
+        if regression_metric == 'mse':
+            regression_loss = mean_squared_error
+            scoring = 'neg_mean_squared_error'
+        elif regression_metric == 'rmsle':
+            if (np.asarray(y, dtype=float) < 0).any():
+                raise ValueError('RMSLE requires nonnegative targets')
+            regression_loss = _root_mean_squared_log_error
+            scoring = make_scorer(regression_loss, greater_is_better=False)
+        else:
+            raise ValueError('SACK_REGRESSION_METRIC must be mse or rmsle')
+        metric = f'negative_{regression_metric}'
     else:
         raise ValueError("Invalid problem_type. Choose from 'binary', 'multiclass', or 'regression'.")
 
@@ -1096,7 +1113,7 @@ def train_and_validation_and_select_the_best_model(X, y, problem_type='binary',
                 score = (accuracy_score(y_val, y_pred) if problem_type == 'binary'
                          else f1_score(y_val, y_pred, average='weighted'))
             else:
-                score = -mean_squared_error(y_val, y_pred)
+                score = -regression_loss(y_val, y_pred)
             if not np.isfinite(score):
                 raise ValueError('Validation score is not finite')
         except Exception as exc:
@@ -1124,13 +1141,12 @@ def train_and_validation_and_select_the_best_model(X, y, problem_type='binary',
         results[model_name]['status'] = 'selected'
         results[model_name]['model_details'] = model_details(estimator)
         break
+    print(f'Validation metric: {metric} (higher is better)')
     for model_name, result in results.items():
         print(f'Model: {model_name}, Result: {result}')
     if best_model is None:
         raise ValueError(f'No model was trained successfully: {results}')
     from sack.model_audit import record_training
-    metric = ('accuracy' if problem_type == 'binary' else
-              'f1_weighted' if problem_type == 'multiclass' else 'negative_mse')
     return record_training(best_model, X, y, results, best_score, metric)
 # Example usage:
 # best_model, performance_results = select_best_model(X, y, problem_type='classification')

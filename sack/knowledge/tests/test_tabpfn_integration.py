@@ -205,6 +205,35 @@ def test_regression_audit_rejects_transformed_targets(tmp_path):
             {'linear regression': {'score': -1.}}, -1., 'negative_mse')
 
 
+def test_configured_rmsle_is_measured_and_audited(monkeypatch, tmp_path):
+    from sklearn.dummy import DummyRegressor
+    from sklearn.model_selection import train_test_split
+
+    X, y, test, sample = regression_task(tmp_path)
+    session = AuditSession(tmp_path)
+    candidate = DummyRegressor()
+    candidate.n_estimators = 1
+    monkeypatch.setenv('SACK_REGRESSION_METRIC', 'rmsle')
+    monkeypatch.setattr(support, 'create_tabpfn', lambda *_: candidate)
+    monkeypatch.setattr('sack.model_audit._active_session', session)
+
+    model = train(X, y, problem_type='regression', selected_models=['TabPFN'])
+    _, _, y_fit, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+    expected = np.sqrt(np.mean((np.log1p(y_val) - np.log1p(y_fit.mean())) ** 2))
+    sample['target'] = model.predict(test[['x']])
+    sample.to_csv(tmp_path / 'submission.csv', index=False)
+    receipt = session.verify_submission()
+    assert receipt['problem_type'] == 'regression'
+    assert receipt['validation_metric'] == 'negative_rmsle'
+    assert receipt['validation_score'] == pytest.approx(-expected)
+
+    candidate.constant_[:] = -0.5
+    sample['target'] = model.predict(test[['x']])
+    sample.to_csv(tmp_path / 'submission.csv', index=False)
+    with pytest.raises(ValueError, match='No verified model prediction'):
+        session.verify_submission()
+
+
 def test_modeling_doc_bypasses_stale_chroma_cache(tmp_path):
     from sack.knowledge.tests.test_titanic_workflow_regressions import load_methods
     doc = tmp_path / 'model_build_predict_tools.md'

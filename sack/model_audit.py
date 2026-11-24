@@ -91,7 +91,7 @@ class AuditSession:
             if prepared['id'].tolist() != raw[identifier].tolist():
                 raise ValueError('Processed IDs/row order differ from raw data: ' + filename)
         mapping, forward = {}, {}
-        regression = metric == 'negative_mse'
+        regression = metric in ('negative_mse', 'negative_rmsle')
         if regression:
             numeric_y = np.asarray(y, dtype=float)
             original_y = pd.to_numeric(raw_train[target], errors='raise').to_numpy(dtype=float)
@@ -134,6 +134,8 @@ class AuditSession:
                 numeric = pd.to_numeric(submission[target], errors='coerce').to_numpy(dtype=float)
                 matches = (np.isfinite(numeric).all() and np.isfinite(predictions).all()
                            and np.allclose(numeric, predictions, rtol=1e-7, atol=1e-9))
+                if record['validation_metric'] == 'negative_rmsle':
+                    matches = matches and (numeric >= 0).all()
             else:
                 if not set(values).issubset(set(raw_train[target])):
                     raise ValueError('Submission labels differ from the original training labels')
