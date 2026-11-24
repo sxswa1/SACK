@@ -1002,6 +1002,9 @@ def train_and_validation_and_select_the_best_model(X, y, problem_type='binary',
     Returns:
         best_model: The best performing model, trained on the train dataset.
     """
+    from sack.model_audit import check_training_inputs, record_training
+
+    check_training_inputs(X, y)
     # Split data into training and validation sets
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
 
@@ -1137,7 +1140,6 @@ def train_and_validation_and_select_the_best_model(X, y, problem_type='binary',
         print(f'Model: {model_name}, Result: {result}')
     if best_model is None:
         raise ValueError(f'No model was trained successfully: {results}')
-    from sack.model_audit import record_training
     return record_training(best_model, X, y, results, best_score, metric)
 # Example usage:
 # best_model, performance_results = select_best_model(X, y, problem_type='classification')

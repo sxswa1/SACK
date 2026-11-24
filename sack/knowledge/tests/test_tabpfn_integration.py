@@ -205,6 +205,18 @@ def test_regression_audit_rejects_transformed_targets(tmp_path):
             {'linear regression': {'score': -1.}}, -1., 'negative_mse')
 
 
+def test_audit_rejects_changed_predictors_before_fitting(monkeypatch, tmp_path):
+    X, y, _, _ = regression_task(tmp_path)
+    monkeypatch.setattr('sack.model_audit._active_session', AuditSession(tmp_path))
+
+    def unexpected_model(*args):
+        pytest.fail('Invalid audited features must be rejected before model creation')
+
+    monkeypatch.setattr(support, 'create_tabpfn', unexpected_model)
+    with pytest.raises(ValueError, match='without dtype casts'):
+        train(X.astype('float32'), y, problem_type='regression', selected_models=['TabPFN'])
+
+
 def test_configured_rmsle_is_measured_and_audited(monkeypatch, tmp_path):
     from sklearn.dummy import DummyRegressor
     from sklearn.model_selection import train_test_split

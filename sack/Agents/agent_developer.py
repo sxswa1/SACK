@@ -360,7 +360,10 @@ Supply full ordered processed_train.csv predictors as a DataFrame (exclude id an
 target) and the corresponding full target vector. The tool validates and refits
 the best estimator on the full training data, returning ONE model, not a tuple.
 Use model.predict on the ordered processed_test.csv predictor DataFrame with the
-same feature columns. Preserve original test IDs and original target label spelling;
+same feature columns. Pass the saved predictor values directly, with no dtype
+downcasts, re-encoding, clipping, or imputation in the modeling stage. If the
+processed tables contain invalid values, correct Feature Engineering first.
+Preserve original test IDs and original target label spelling;
 inverse-transform encoded classification targets before writing submission.csv.
 For regression, pass original numeric targets and write finite numeric predictions
 without label encoding or target transformations. Do not refit the
