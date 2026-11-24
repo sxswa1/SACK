@@ -1,4 +1,5 @@
 ﻿import os
+from pathlib import Path
 import pandas as pd
 import json
 import chromadb
@@ -244,40 +245,32 @@ class TestTool:  # 所有单元测试函数都定义在这里。
         
 
     def test_processed_train_feature_number(self, state: State):
-        def get_categorical_nunique_formatted(dataframe):
-            categorical_columns = dataframe.select_dtypes(include=['object', 'category', 'bool']).columns
-            nunique_counts = dataframe[categorical_columns].nunique().sort_values(ascending=False)
-            formatted_output = "\n".join([f"{feature}    number of unique values: {count}" for feature, count in nunique_counts.items()])
-            return formatted_output
+        directory = Path(state.competition_dir)
+        processed_columns = pd.read_csv(directory / 'processed_train.csv', nrows=0).columns
+        cleaned_path = directory / 'cleaned_train.csv'
+        cleaned_columns = pd.read_csv(cleaned_path, nrows=0).columns
+        submission_columns = pd.read_csv(directory / 'sample_submission.csv', nrows=0).columns
+        if not set(processed_columns) - set(submission_columns):
+            return False, 15, (
+                'No predictor columns remain after feature selection. Preserve at least one real predictor, '
+                'excluding IDs and targets. Feature selection tools return feature names in the '
+                "'feature' column. Their output column names are not the selected predictors."
+            )
 
-        path = f"{state.competition_dir}/processed_train.csv"
-        df = pd.read_csv(path)
-        path_to_origin_train = f"{state.competition_dir}/cleaned_train.csv"
-        df_origin = pd.read_csv(path_to_origin_train)
-        sample = pd.read_csv(f"{state.competition_dir}/sample_submission.csv", nrows=0)
-        predictors = set(df.columns) - set(sample.columns)
-        if not predictors:
-            return False, 15, "No predictor columns remain after feature selection. Preserve at least one real predictor, excluding IDs and targets. Feature selection tools return feature names in the 'feature' column; their output column names are not the selected predictors."
-        result = "Valid"
-        if (len(df.columns) <= 3 * len(df_origin.columns) or len(df.columns) <= 50) and result == "Valid":  # 不能引入太多新特征
-            return True, 15, f"The feature engineering phase is well performed."
-        else:
-            false_info = "There are too many features after handling features in the feature engineering phase."
-            false_info += f'''processed_train.csv is the processed data of cleaned_train.csv after feature engineering.
-During the feature engineering phase, improper feature handling has resulted in an excessive number of features. 
-One possible reason is that during the feature processing, certain categorical features (such as brand, transmission, etc.) have too many categories, leading to a large number of features being generated after one-hot encoding.
+        limit = max(3 * len(cleaned_columns), 50)
+        count = len(processed_columns)
+        if count <= limit:
+            return True, 15, f'Processed training columns are within the limit ({count}/{limit}).'
 
-Here is the information about the categorical features of cleaned_train.csv and their unique value counts:
-Categorical features of cleaned_train.csv and their unique value counts:
-{get_categorical_nunique_formatted(df_origin)}
-
-Here is the information about the features of cleaned_train.csv:
-{df_origin.columns}
-
-Here is the information about the features of processed_train.csv:
-{df.columns}
-'''
-            return False, 15, false_info
+        original = pd.read_csv(cleaned_path)
+        cardinalities = original.select_dtypes(include=['object', 'category', 'bool']).nunique()
+        return False, 15, (
+            f'Processed training has {count} columns. The limit is {limit}, including IDs and targets. '
+            'Remove redundant derived features and keep required categorical encodings.\n'
+            f'Cleaned feature names: {list(cleaned_columns)}\n'
+            f'Processed feature names: {list(processed_columns)}\n'
+            f'Cleaned categorical cardinalities:\n{cardinalities.sort_values(ascending=False).to_string()}'
+        )
 
     def test_processed_test_feature_number(self, state: State):
         def get_categorical_nunique_formatted(dataframe):
@@ -316,22 +309,26 @@ Here is the information about the features of processed_test.csv:
             return False, 16, false_info
 
     def test_cleaned_train_no_missing_target(self, state: State):
-        # read train.csv and test.csv
-        path_train = f"{state.competition_dir}/train.csv"
-        path_test = f"{state.competition_dir}/test.csv"
-        path_cleaned_train = f"{state.competition_dir}/cleaned_train.csv"
-        
-        train_columns = pd.read_csv(path_train).columns
-        test_columns = pd.read_csv(path_test).columns
-        target_columns = [col for col in train_columns if col not in test_columns]
+        directory = Path(state.competition_dir)
+        train_path = directory / 'train.csv'
+        test_columns = pd.read_csv(directory / 'test.csv', nrows=0).columns
+        cleaned_path = directory / 'cleaned_train.csv'
+        target_columns = [name for name in pd.read_csv(train_path, nrows=0).columns
+                          if name not in test_columns]
+        cleaned_columns = pd.read_csv(cleaned_path, nrows=0).columns
+        if not set(target_columns).issubset(cleaned_columns):
+            return False, 17, f'The cleaned training file must include the original targets {target_columns}.'
 
-        # check if the target column is in the cleaned_train.csv
-        df = pd.read_csv(path_cleaned_train)
-        if all(col in df.columns for col in target_columns):
-            return True, 17, "The target columns are in the cleaned_train.csv file, please continue to the next step of the process"
-        else:
-            return False, 17, f"The target columns {target_columns} are not in the cleaned_train.csv file, please reprocess it"
-        
+        original = pd.read_csv(train_path, usecols=target_columns)[target_columns]
+        cleaned = pd.read_csv(cleaned_path, usecols=target_columns)[target_columns]
+        try:
+            pd.testing.assert_frame_equal(
+                cleaned, original, check_dtype=False, check_exact=False, rtol=1e-12, atol=1e-12
+            )
+        except AssertionError:
+            return False, 17, 'Data cleaning changed training target values or their row order.'
+        return True, 17, 'The cleaned training file preserves the original target values.'
+
     def test_cleaned_test_no_target_column(self, state: State):
         # read train.csv and test.csv
         path_train = f"{state.competition_dir}/train.csv"

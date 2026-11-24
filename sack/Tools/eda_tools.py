@@ -1703,55 +1703,44 @@ def analyze_time_series_properties(data: pd.DataFrame, time_column: str = None) 
 
 
 def analyze_spatial_correlation(data: pd.DataFrame, spatial_cols: List[str] = None) -> float:
-    """
-    Simplified spatial correlation analysis (distance-based similarity).
+    """Measure positive association between coordinate distance and feature difference.
 
-    Args:
-        data (pd.DataFrame): Input DataFrame (spatial data with coordinates).
-        spatial_cols (List[str], optional): Spatial coordinate columns (e.g., ["lat", "lon"]). Defaults to None.
-
-    Returns:
-        float: Spatial correlation strength (0-1; 0=no spatial pattern, 1=strong spatial clustering).
+    The first non-coordinate numeric feature serves as the proxy. Automatic
+    detection uses conventional coordinate labels, such as lat/lon and x/y.
     """
-    # 自动检测空间列（命名包含lat/lon/coord/x/y）
+    numeric_cols = data.select_dtypes(include=[np.number]).columns
     if not spatial_cols:
-        spatial_pattern = r'lat|lon|coord|x|y'
-        spatial_cols = [col for col in data.columns if pd.Series(col.lower()).str.contains(spatial_pattern).any()]
+        coordinate_labels = {
+            'lat', 'latitude', 'lon', 'lng', 'longitude', 'x', 'y',
+            'coordx', 'coordy', 'xcoord', 'ycoord', 'easting', 'northing',
+        }
+        spatial_cols = [
+            col for col in numeric_cols
+            if str(col).lower().replace('_', '').replace(' ', '') in coordinate_labels
+        ]
     if len(spatial_cols) < 2:
         return 0.0
+    if not set(spatial_cols).issubset(numeric_cols):
+        raise ValueError('Spatial coordinate columns must be present and numeric')
 
-    # 计算空间距离矩阵（采样前1000个样本，避免计算量过大）
-    sample_data = data[spatial_cols].dropna().head(1000)
-    if len(sample_data) < 50:
+    value_cols = [col for col in numeric_cols if col not in spatial_cols
+                  and str(col).lower() not in {'id', 'index'}]
+    if not value_cols:
+        return 0.0
+    proxy = value_cols[0]
+    sample = data[[*spatial_cols, proxy]].replace([np.inf, -np.inf], np.nan).dropna().head(1000)
+    if len(sample) < 50:
         return 0.0
 
-    # 计算距离与数值特征的相关性（假设数值特征是空间关联的代理）
-    numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
-    if not numeric_cols:
+    from scipy.spatial.distance import pdist
+
+    distances = pdist(sample[spatial_cols].to_numpy(dtype=float))
+    differences = pdist(sample[[proxy]].to_numpy(dtype=float))
+    if np.ptp(distances) == 0 or np.ptp(differences) == 0:
         return 0.0
+    correlation = stats.pearsonr(distances, differences)[0]
+    return round(float(np.clip(correlation, 0.0, 1.0)), 4)
 
-    # 空间距离（欧氏距离）
-    from scipy.spatial.distance import pdist, squareform
-    dist_matrix = squareform(pdist(sample_data))
-    dist_flat = dist_matrix[np.triu_indices(len(sample_data), k=1)]  # 上三角矩阵，避免重复
-
-    # 数值特征相似度（归一化后差值）
-    num_col = numeric_cols[0]  # 取第一个数值列作为代理
-    num_vals = sample_data[num_col].values if num_col in sample_data.columns else data[num_col].values[:len(sample_data)]
-    num_vals_norm = (num_vals - num_vals.mean()) / (num_vals.std() + 0.001)
-    num_diff_flat = []
-    for i in range(len(sample_data)):
-        for j in range(i+1, len(sample_data)):
-            num_diff_flat.append(abs(num_vals_norm[i] - num_vals_norm[j]))
-
-    # 空间相关性：距离与数值差异的负相关（距离越近，差异越小→相关性越强）
-    if len(dist_flat) > 0 and len(num_diff_flat) > 0:
-        corr, _ = stats.pearsonr(dist_flat, num_diff_flat)
-        spatial_corr_strength = min(1.0, max(0.0, -corr))  # 负相关→转为正强度
-    else:
-        spatial_corr_strength = 0.0
-
-    return round(spatial_corr_strength, 4)
 
 def estimate_causal_confounder_strength(data: pd.DataFrame, target_column: str, treatment_column: str) -> float:
     """
@@ -1828,6 +1817,8 @@ def analyze_high_cardinality_impact(data: pd.DataFrame, target_column: str = Non
 
     # 高基数判断（固定阈值≥20个唯一值）
     high_card_cols = [col for col in categorical_cols if data[col].nunique() >= 20]
+    if not high_card_cols:
+        return {"high_cardinality_ratio": 0.0, "high_cardinality_impact": 0.0}
     high_card_ratio = len(high_card_cols) / len(categorical_cols)
 
     # 影响强度（监督模式：编码后特征重要性；无监督模式：唯一值占比方差）

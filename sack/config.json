@@ -269,7 +269,7 @@
                         1
                     ],
                     [
-                        "If the percentage of missing values in a feature is greater than {placeholder}, then mark the feature as needing to be dropped.",
+                        "Mark a feature as a drop candidate when the fraction of rows with missing values exceeds {placeholder} on a 0-to-1 scale (0.5 means 50%). Compare the fraction before converting it to a percentage for display.",
                         0.5
                     ]
                 ]
@@ -286,7 +286,7 @@
                         1
                     ],
                     [
-                        "If the percentage of missing values in a feature is greater than {placeholder}, dropped the feature.",
+                        "Drop a feature when the fraction of rows with missing values exceeds {placeholder} on a 0-to-1 scale (0.5 means 50%). Pass this fraction as thresh to remove_columns_with_missing_data.",
                         0.5
                     ],
                     [

@@ -205,6 +205,61 @@ def test_regression_audit_rejects_transformed_targets(tmp_path):
             {'linear regression': {'score': -1.}}, -1., 'negative_mse')
 
 
+def test_audit_rejects_changed_predictors_before_fitting(monkeypatch, tmp_path):
+    X, y, _, _ = regression_task(tmp_path)
+    monkeypatch.setattr('sack.model_audit._active_session', AuditSession(tmp_path))
+
+    def unexpected_model(*args):
+        pytest.fail('Invalid audited features must be rejected before model creation')
+
+    monkeypatch.setattr(support, 'create_tabpfn', unexpected_model)
+    with pytest.raises(ValueError, match='without dtype casts'):
+        train(X.astype('float32'), y, problem_type='regression', selected_models=['TabPFN'])
+
+
+def test_configured_rmsle_is_measured_and_audited(monkeypatch, tmp_path, capsys):
+    from sklearn.dummy import DummyRegressor
+    from sklearn.model_selection import train_test_split
+
+    X, y, test, sample = regression_task(tmp_path)
+    session = AuditSession(tmp_path)
+    candidate = DummyRegressor()
+    candidate.n_estimators = 1
+    monkeypatch.setenv('SACK_REGRESSION_METRIC', 'rmsle')
+    monkeypatch.setattr(support, 'create_tabpfn', lambda *_: candidate)
+    monkeypatch.setattr('sack.model_audit._active_session', session)
+
+    model = train(X, y, problem_type='regression', selected_models=['TabPFN'])
+    _, _, y_fit, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+    expected = np.sqrt(np.mean((np.log1p(y_val) - np.log1p(y_fit.mean())) ** 2))
+    sample['target'] = model.predict(test[['x']])
+    sample.to_csv(tmp_path / 'submission.csv', index=False)
+    receipt = session.verify_submission()
+    assert receipt['problem_type'] == 'regression'
+    assert receipt['validation_metric'] == 'negative_rmsle'
+    assert receipt['validation_score'] == pytest.approx(-expected)
+    assert '20% holdout (12 rows), random_state=42' in capsys.readouterr().out
+
+    candidate.constant_[:] = -0.5
+    sample['target'] = model.predict(test[['x']])
+    sample.to_csv(tmp_path / 'submission.csv', index=False)
+    with pytest.raises(ValueError, match='No verified model prediction'):
+        session.verify_submission()
+
+
+def test_model_plan_respects_deployed_tabpfn_candidate_and_metric(monkeypatch):
+    from sack.state import State
+
+    state = State('Model Building, Validation, and Prediction', 'generic-regression', use_mode='DSPipeline')
+    monkeypatch.delenv('SACK_TABPFN_VARIANT', raising=False)
+    assert 'maximum of five candidate models' in state.get_state_info()
+    monkeypatch.setenv('SACK_TABPFN_VARIANT', 'v3.5-fast')
+    monkeypatch.setenv('SACK_REGRESSION_METRIC', 'rmsle')
+    instructions = state.get_state_info()
+    assert "selected_models=['TabPFN']" in instructions
+    assert '20% holdout' in instructions and 'RMSLE' in instructions
+
+
 def test_modeling_doc_bypasses_stale_chroma_cache(tmp_path):
     from sack.knowledge.tests.test_titanic_workflow_regressions import load_methods
     doc = tmp_path / 'model_build_predict_tools.md'
@@ -212,3 +267,34 @@ def test_modeling_doc_bypasses_stale_chroma_cache(tmp_path):
     method = load_methods('sack/Tools/retrieve_doc.py', 'RetrieveTool', ['query_tools'])['query_tools']
     tool = SimpleNamespace(doc_path=str(tmp_path))  # no db: cannot accidentally use old vectors
     assert method(tool, 'model selection', 'model_build_predict') == doc.read_text()
+
+
+def test_fast_contexts_cover_all_rows_and_combine_predictions(monkeypatch, tmp_path):
+    contexts = []
+
+    class FakeRegressor:
+        def __init__(self, **options):
+            assert options['device'] == 'cuda:0'
+            assert options['fit_mode'] == 'fit_with_cache'
+            self.inference_config_ = SimpleNamespace(SUBSAMPLE_SAMPLES=None)
+
+        def fit(self, X, target):
+            contexts.append(X['feature'].tolist())
+            self.prediction = target.mean()
+
+        def predict(self, X):
+            return np.full(len(X), self.prediction)
+
+    monkeypatch.setitem(sys.modules, 'tabpfn', SimpleNamespace(TabPFNRegressor=FakeRegressor))
+    monkeypatch.setitem(sys.modules, 'torch', SimpleNamespace(
+        cuda=SimpleNamespace(empty_cache=lambda: None)))
+    X = pd.DataFrame({'feature': range(23)})
+    y = X['feature'] + 1
+    model = support.TabPFNShardedRegressor(tmp_path / 'checkpoint', 'cuda:0', 10, 1, True)
+    model.fit(X, y)
+    prediction = model.predict(X.iloc[:2])
+    assert [len(rows) for rows in contexts] == [8, 8, 7]
+    assert sorted(row for rows in contexts for row in rows) == list(range(23))
+    assert np.allclose(prediction, np.expm1(np.log1p(y).mean()))
+    with pytest.raises(ValueError, match='nonnegative'):
+        model.fit(X, -y)

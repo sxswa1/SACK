@@ -202,3 +202,38 @@ def test_developer_executes_audited_runner_and_receives_real_evidence(tmp_path, 
     error = method(developer, state, False, str(script))
     assert error is not real_training
     assert developer._training_evidence.get('passed', False) is real_training
+
+
+def test_spatial_tool_ignores_ordinary_insurance_field_names():
+    from sack.Tools.eda_tools import analyze_spatial_correlation
+
+    data = pd.DataFrame({
+        'Policy Type': ['A', 'B'] * 30,
+        'Exercise Frequency': ['Daily', 'Weekly'] * 30,
+        'Annual Income': np.arange(60),
+    })
+    assert analyze_spatial_correlation(data) == 0.0
+    with pytest.raises(ValueError, match='present and numeric'):
+        analyze_spatial_correlation(data, ['Policy Type', 'Exercise Frequency'])
+
+
+def test_spatial_tool_uses_aligned_proxy_values_after_dropping_missing_rows():
+    from sack.Tools.eda_tools import analyze_spatial_correlation
+
+    x = np.arange(100, dtype=float)
+    data = pd.DataFrame({'id': x[::-1], 'proxy': x.copy(), 'coord_x': x, 'coord_y': np.zeros(100)})
+    data.loc[0:5, 'coord_x'] = np.nan
+    data.loc[21:22, 'proxy'] = np.inf
+    assert analyze_spatial_correlation(data) == 1.0
+
+
+
+def test_high_cardinality_impact_is_zero_when_no_categories_are_high_cardinality():
+    import pandas as pd
+    from sack.Tools.eda_tools import analyze_high_cardinality_impact
+
+    data = pd.DataFrame({'policy': ['A', 'B'] * 15, 'premium': range(30)})
+    assert analyze_high_cardinality_impact(data, target_column='premium') == {
+        'high_cardinality_ratio': 0.0,
+        'high_cardinality_impact': 0.0,
+    }

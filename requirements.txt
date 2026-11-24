@@ -6,6 +6,7 @@ python-dotenv==1.0.1
 catboost==1.2.6
 chardet==5.2.0
 chromadb==0.5.5
+posthog==3.5.0
 docx==0.2.4
 html2text==2024.2.26
 httpx==0.28.1

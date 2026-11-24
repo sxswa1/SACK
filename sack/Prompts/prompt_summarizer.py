@@ -258,6 +258,9 @@ Provide your response in markdown format, following this structure:
 - Highlight critical decisions and provide detailed explanations for their reasoning
 - Include relevant statistics and visualizations mentioned in the phase reports
 - Keep the language clear and concise, suitable for a technical audience
+- Budget space for each available phase, including feature engineering and the measured modeling outcome.
+- Prioritize reported model, validation metric, validation result, and prediction count over reproducing earlier tables.
+- Write <!-- end of report --> on the final line inside the Markdown fence after all available sections are complete.
 - For each significant action (especially in data cleaning and feature engineering), provide a thorough explanation of why it was taken and its expected impact
 
 #############

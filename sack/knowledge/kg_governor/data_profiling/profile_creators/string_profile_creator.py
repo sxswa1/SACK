@@ -4,8 +4,6 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # set tensorflow log level to FATAL
 import pandas as pd
 import torch
 
-import chars2vec
-
 from sack.knowledge.kg_governor.data_profiling.profile_creators.textual_profile_creator import TextualProfileCreator
 from sack.knowledge.kg_governor.data_profiling.model.table import Table
 from sack.knowledge.kg_governor.data_profiling.model.column_data_type import ColumnDataType
@@ -30,6 +28,8 @@ class StringProfileCreator(TextualProfileCreator):
         self.scaling_model = load_pretrained_model(StringScalingModel, scaling_model_path)
 
     def _preprocess_column_for_embedding_model(self, device='cpu') -> torch.tensor:
+        import chars2vec
+
         non_missing = self.column.dropna()
         if len(non_missing) > 10000:
             sample = non_missing.sample(int(0.1 * len(non_missing)))

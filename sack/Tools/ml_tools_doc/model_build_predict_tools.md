@@ -32,8 +32,9 @@
 - Outputs performance scores and best hyperparameters for each model.
 - Requires scikit-learn and relevant model libraries.
 - Optional `TabPFN` requires `pip install -r requirements-tabpfn.txt` (package 2.1.3, original v2 classifier/regressor checkpoints). It is not in the default model list.
-- TabPFN limits apply to the full training set: 1000 rows on CPU by default, 10000 on CUDA, 500 features and 10 classes. An explicit TABPFN_ALLOW_CPU_LARGE_DATASET=1 opt-in permits up to 10000 CPU rows without disabling the pretraining boundaries. Use the existing processed feature tables and exclude IDs/target.
+- v2 limits apply to the full training set: 1000 rows on CPU by default, 10000 on CUDA, 500 features and 10 classes. An explicit TABPFN_ALLOW_CPU_LARGE_DATASET=1 opt-in permits up to 10000 CPU rows without disabling the pretraining boundaries. Use the existing processed feature tables and exclude IDs/target.
 - Configure `SACK_TABPFN_DEVICE=auto|cpu|cuda|cuda:<index>`, `SACK_TABPFN_MODEL_DIR`, `SACK_TABPFN_N_ESTIMATORS` (default 4), and `SACK_TABPFN_N_JOBS` (default 1). Weights download on first fit if not cached; pre-download for offline servers.
+- The opt-in CUDA regression deployment can use pinned TabPFN-3.5-Fast. It uses disjoint contexts up to the configured shard size and combines their predictions, covering the full input. Pass the original numeric target.
 - Failed TabPFN candidates are recorded and skipped, including full-data refit failures. Select another candidate too for fallback; if no candidate succeeds, the tool raises an error.
 - Return value is ONE trained model. Use `model.predict` on the ordered processed test DataFrame. The winning estimator is refitted on all training rows.
 - Regression requires original finite numeric targets and predictions; do not encode or log-transform targets in this first integration.

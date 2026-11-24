@@ -79,7 +79,8 @@ PROMPT_DEVELOPER_CONSTRAINTS = '''
 3. Data Processing:
    - Always work on a copy of the DataFrame, not the original.
    - Ensure correct data types for all columns before any operations.
-   - Apply consistent modifications (e.g., scaling, encoding) to both training and test sets.
+   - Fit imputation values, scaling parameters, category mappings, and other learned preprocessing on training rows only. Apply the same fitted values to the test set.
+   - Keep training and test frames separate during cleaning. To reuse train-derived imputation values, use fill_missing_values with method="constant" and the same fill_value on each frame.
    - Take care with target-dependent operations on the test set, which lacks the target variable.
    - Do NOT modify Id-type column if it exists.
    - For EDA phases: Keep original data unchanged (only analyze, do NOT modify values/columns).

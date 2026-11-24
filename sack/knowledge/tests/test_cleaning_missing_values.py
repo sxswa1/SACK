@@ -26,7 +26,8 @@ def test_string_conversion_preserves_missingness_through_cleaning_and_csv(tmp_pa
     reduced = remove_columns_with_missing_data(converted, thresh=0.5)
     assert 'category' not in reduced.columns
     assert 'number_as_text' in reduced.columns
-    cleaned = fill_missing_values(reduced.copy(), 'number_as_text', method='constant', fill_value='Missing')
+    with pd.option_context('mode.copy_on_write', True):
+        cleaned = fill_missing_values(reduced.copy(), 'number_as_text', method='constant', fill_value='Missing')
     path = tmp_path / 'cleaned.csv'
     cleaned.to_csv(path, index=False)
     roundtrip = pd.read_csv(path)
@@ -34,3 +35,39 @@ def test_string_conversion_preserves_missingness_through_cleaning_and_csv(tmp_pa
     assert roundtrip.id.tolist() == original_ids.tolist()
     assert roundtrip.SalePrice.tolist() == original_target.tolist()
     assert roundtrip.number_as_text.tolist() == ['1.0', '2.0', 'Missing', '4.0']
+
+
+def test_type_conversion_rejects_duplicate_identifier_before_modifying_columns():
+    import pytest
+
+    data = pd.DataFrame([['1', '2', '3']], columns=['feature', 'id', 'id'])
+    with pytest.raises(ValueError, match="Duplicates: \\['id'\\]"):
+        convert_data_types(data, ['feature', 'id'], 'int')
+    assert data.loc[0, 'feature'] == '1'
+
+
+
+def test_default_missing_value_rules_render_the_same_fraction_and_percentage(tmp_path):
+    from sack.state import State
+
+    for phase in ('Preliminary Exploratory Data Analysis', 'Data Cleaning'):
+        state = State(phase, 'example', use_mode='DSPipeline')
+        state.restore_dir = tmp_path
+        rules = state.generate_rules()
+        assert 'fraction of rows with missing values exceeds 0.5 on a 0-to-1 scale (0.5 means 50%)' in rules
+
+
+
+def test_missing_fraction_strictly_exceeds_threshold_and_preserves_column_order():
+    data = pd.DataFrame({
+        'reviewed': [None, 1, 2],
+        'excluded': [None, None, None],
+        'too_sparse': [None, None, 1],
+        'intact': [1, 2, 3],
+    })
+    selected = ['reviewed', 'too_sparse', 'intact']
+    for threshold in (0.5, 1 / 3):
+        reduced = remove_columns_with_missing_data(data, thresh=threshold, columns=selected)
+        assert list(reduced) == ['reviewed', 'excluded', 'intact']
+    assert list(remove_columns_with_missing_data(data, thresh=0)) == ['intact']
+    assert list(remove_columns_with_missing_data(data, thresh=1)) == list(data)

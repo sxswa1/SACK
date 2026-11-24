@@ -65,7 +65,7 @@ class AuditSession:
         if not isinstance(X, pd.DataFrame) or X.empty or not X.columns.is_unique:
             return False
         frame = pd.read_csv(self.task / filename)
-        _, _, _, target = self.source_tables()
+        _, target = pd.read_csv(self.task / 'rawdata/sample_submission.csv', nrows=0).columns
         if 'id' in X.columns or target in X.columns or not set(X.columns).issubset(frame.columns):
             return False
         reference = frame.loc[:, X.columns]
@@ -79,19 +79,27 @@ class AuditSession:
         return not X.isna().any().any() and all(
             np.isfinite(X[c]).all() for c in X.select_dtypes(include='number').columns)
 
+    def check_training_inputs(self, X, y):
+        if not self.matches_features(X, 'processed_train.csv') or len(y) != len(X):
+            raise ValueError(
+                'Audited training requires the full ordered processed_train predictors and target. '
+                'Read the processed predictors as saved and pass them without dtype casts or imputation.'
+            )
+
     def record_training(self, model, X, y, results, score, metric):
         import math
         import pandas as pd
         import numpy as np
         raw_train, raw_test, identifier, target = self.source_tables()
-        if not self.matches_features(X, 'processed_train.csv') or len(y) != len(raw_train):
-            raise ValueError('Audited training requires the full ordered processed_train predictors and target')
+        self.check_training_inputs(X, y)
+        if len(y) != len(raw_train):
+            raise ValueError('Audited training requires all original training rows')
         for filename, raw in [('processed_train.csv', raw_train), ('processed_test.csv', raw_test)]:
             prepared = pd.read_csv(self.task / filename, dtype=str, keep_default_na=False)
             if prepared['id'].tolist() != raw[identifier].tolist():
                 raise ValueError('Processed IDs/row order differ from raw data: ' + filename)
         mapping, forward = {}, {}
-        regression = metric == 'negative_mse'
+        regression = metric in ('negative_mse', 'negative_rmsle')
         if regression:
             numeric_y = np.asarray(y, dtype=float)
             original_y = pd.to_numeric(raw_train[target], errors='raise').to_numpy(dtype=float)
@@ -134,6 +142,8 @@ class AuditSession:
                 numeric = pd.to_numeric(submission[target], errors='coerce').to_numpy(dtype=float)
                 matches = (np.isfinite(numeric).all() and np.isfinite(predictions).all()
                            and np.allclose(numeric, predictions, rtol=1e-7, atol=1e-9))
+                if record['validation_metric'] == 'negative_rmsle':
+                    matches = matches and (numeric >= 0).all()
             else:
                 if not set(values).issubset(set(raw_train[target])):
                     raise ValueError('Submission labels differ from the original training labels')
@@ -145,6 +155,11 @@ class AuditSession:
         raise ValueError('No verified model prediction matches submission.csv. Call the real training '
                          'tool, then model.predict on ordered processed_test predictors; decode labels '
                          'back to their original spelling. Random/placeholder predictions are invalid.')
+
+
+def check_training_inputs(X, y):
+    if _active_session is not None:
+        _active_session.check_training_inputs(X, y)
 
 
 def record_training(model, X, y, results, score, metric):

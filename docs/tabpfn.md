@@ -99,3 +99,17 @@ python scripts/validate_tabpfn.py \
 服务器部署前确认无活跃实验、Git 工作区无冲突，并保存现有环境版本和部署检查点。
 在功能分支上安装依赖并执行上述检查。验证输出使用独立的新目录，保留历史实验数据。
 本地结果不能替代服务器安装与验证结果。
+
+## GPU 大表回归
+
+TabPFN-3.5-Fast 使用独立环境中的 `requirements-tabpfn-fast.txt`。下载 [官方权重](https://huggingface.co/Prior-Labs/tabpfn_3_5/blob/main/tabpfn-v3.5-fast-20260909.safetensors) 放在 `SACK_TABPFN_MODEL_DIR`，SACK 会在加载前校验 SHA-256。
+
+```dotenv
+SACK_TABPFN_VARIANT=v3.5-fast
+SACK_TABPFN_DEVICE=cuda:0
+SACK_TABPFN_FAST_SHARD_ROWS=250000
+SACK_TABPFN_N_ESTIMATORS=1
+SACK_TABPFN_LOG1P=0
+```
+
+显式启用此版本的部署使用 `selected_models=['TabPFN']`。仍需传入有序的完整特征表和原始数值目标。适配器以固定随机种子将训练行划分为不重叠的上下文，逐个建立缓存并分批预测，然后按各分片行数加权。显存不足时可以减少单片行数。对于目标非负且按 RMSLE 评估的任务，可显式设置 `SACK_TABPFN_LOG1P=1`，在模型内部转换目标并输出原尺度预测。设置 `SACK_REGRESSION_METRIC=rmsle` 后，SACK 使用 RMSLE 进行验证和模型选择，在审计中记录 `negative_rmsle`（RMSLE 的相反数）。

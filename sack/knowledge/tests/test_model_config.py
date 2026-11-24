@@ -2,6 +2,7 @@
 
 import ast
 import logging
+import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -100,7 +101,7 @@ def api_namespace():
         load_api_config=lambda: ("test-key", "https://general.invalid/v1",
                                  "https://coder.invalid/v1", "https://vision.invalid/v1"),
         time=SimpleNamespace(time=lambda: 0, sleep=lambda seconds: calls.append(("sleep", seconds))),
-        MAX_ATTEMPTS=2, RETRY_DELAY=0,
+        MAX_ATTEMPTS=2, RETRY_DELAY=0, os=os,
     )
     return namespace, calls, openai
 
@@ -115,7 +116,19 @@ def test_same_model_name_can_use_each_roles_distinct_endpoint(monkeypatch, role)
                                frequency_penalty=0, presence_penalty=0, stop=None, timeout=5)
     assert handler.get_output([{"role": "user", "content": "hello"}], settings) == "OK"
     assert calls[0][1]["base_url"] == f"https://{role}.invalid/v1"
+    assert calls[0][1]["max_retries"] == 0
     assert calls[1][1]["model"] == "shared-model"
+
+
+def test_coder_thinking_override_only_applies_to_the_coder_endpoint(monkeypatch):
+    monkeypatch.setenv("SACK_CODER_DISABLE_THINKING", "1")
+    namespace, calls, _ = api_namespace()
+    settings = SimpleNamespace(temperature=0, max_completion_tokens=16, top_p=1,
+                               frequency_penalty=0, presence_penalty=0, stop=None, timeout=5)
+    for role, expected in (("coder", False), ("general", True)):
+        handler = namespace["APIHandler"]("shared-model", endpoint_role=role)
+        handler.get_output([], settings)
+        assert calls[-1][1]["extra_body"] == {"enable_thinking": expected}
 
 
 @pytest.mark.parametrize("role,endpoint", [("coder", "coder"), ("debug", "coder"), ("vision", "vision")])
@@ -221,3 +234,19 @@ def test_embedding_model_selection_preserves_each_clients_vector_contract(monkey
     assert calls[0].get("dimensions") == dimensions
     explicit = namespace["OpenaiEmbeddings"]("test-key", model="explicit-embedding")
     assert explicit.model == "explicit-embedding"
+
+
+
+def test_model_timeout_is_independent_of_completion_budget(monkeypatch):
+    from dataclasses import dataclass
+
+    namespace = load_definitions("sack/api_handler.py", ["APISettings"], dataclass=dataclass, os=os)
+    settings = namespace["APISettings"]
+    monkeypatch.delenv("SACK_API_TIMEOUT_SECONDS", raising=False)
+    assert settings(max_completion_tokens=4096).timeout == 600
+    assert settings(max_completion_tokens=16384).timeout == 600
+    monkeypatch.setenv("SACK_API_TIMEOUT_SECONDS", "90")
+    assert settings(max_completion_tokens=4096).timeout == 90
+    monkeypatch.setenv("SACK_API_TIMEOUT_SECONDS", "0")
+    with pytest.raises(ValueError, match="positive integer"):
+        _ = settings(max_completion_tokens=4096).timeout

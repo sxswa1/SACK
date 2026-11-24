@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import numpy as np
 from typing import Dict, Any, Union, List
@@ -33,17 +34,17 @@ def fill_missing_values(data: pd.DataFrame, columns: Union[str, List[str]], meth
     for column in columns:
         if method == 'auto':
             if pd.api.types.is_numeric_dtype(data[column]):
-                data[column].fillna(data[column].mean(), inplace=True)
+                data[column] = data[column].fillna(data[column].mean())
             else:
-                data[column].fillna(data[column].mode()[0], inplace=True)
+                data[column] = data[column].fillna(data[column].mode()[0])
         elif method == 'mean':
-            data[column].fillna(data[column].mean(), inplace=True)
+            data[column] = data[column].fillna(data[column].mean())
         elif method == 'median':
-            data[column].fillna(data[column].median(), inplace=True)
+            data[column] = data[column].fillna(data[column].median())
         elif method == 'mode':
-            data[column].fillna(data[column].mode()[0], inplace=True)
+            data[column] = data[column].fillna(data[column].mode()[0])
         elif method == 'constant':
-            data[column].fillna(fill_value, inplace=True)
+            data[column] = data[column].fillna(fill_value)
         else:
             raise ValueError("Invalid method. Choose from 'auto', 'mean', 'median', 'mode', or 'constant'.")
 
@@ -57,7 +58,7 @@ def remove_columns_with_missing_data(data: pd.DataFrame, thresh: float = 0.5,
 
     Args:
         data (pd.DataFrame): The input DataFrame.
-        thresh (float, optional): The minimum proportion of missing values required to drop a column.
+        thresh (float, optional): Drop columns with a missing fraction strictly above this threshold.
                                     Should be between 0 and 1. Defaults to 0.5.
         columns (str or List[str], optional): Labels of columns to consider. Defaults to None.
 
@@ -74,17 +75,8 @@ def remove_columns_with_missing_data(data: pd.DataFrame, thresh: float = 0.5,
     else:
         data_subset = data
 
-    # Calculate the number of missing values allowed based on the threshold
-    max_missing = int(thresh * len(data_subset))
-
-    # Identify columns to keep
-    columns_to_keep = data_subset.columns[data_subset.isna().sum() < max_missing]
-
-    # If columns was specified, add back other columns not in the subset
-    if columns is not None:
-        columns_to_keep = columns_to_keep.union(data.columns.difference(columns))
-
-    return data[columns_to_keep]
+    drop_columns = data_subset.columns[data_subset.isna().mean() > thresh]
+    return data.drop(columns=drop_columns)
 
 
 def detect_and_handle_outliers_zscore(data: pd.DataFrame, columns: Union[str, List[str]], threshold: float = 3.0,
@@ -230,6 +222,10 @@ def convert_data_types(data: pd.DataFrame, columns: Union[str, List[str]], targe
     Returns:
         pd.DataFrame: The DataFrame with converted data types.
     """
+    if not data.columns.is_unique:
+        duplicates = data.columns[data.columns.duplicated()].unique().tolist()
+        raise ValueError(f"Data type conversion requires unique column labels. Duplicates: {duplicates}")
+
     if isinstance(columns, str):
         columns = [columns]
 
@@ -977,7 +973,11 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, Grad
     GradientBoostingRegressor
 from sklearn.svm import SVC, SVR
 from sklearn.neural_network import MLPClassifier, MLPRegressor
-from sklearn.metrics import f1_score, mean_squared_error, accuracy_score
+from sklearn.metrics import accuracy_score, f1_score, make_scorer, mean_squared_error, mean_squared_log_error
+
+
+def _root_mean_squared_log_error(y_true, y_pred):
+    return np.sqrt(mean_squared_log_error(y_true, y_pred))
 
 
 def train_and_validation_and_select_the_best_model(X, y, problem_type='binary',
@@ -1002,8 +1002,14 @@ def train_and_validation_and_select_the_best_model(X, y, problem_type='binary',
     Returns:
         best_model: The best performing model, trained on the train dataset.
     """
+    from sack.model_audit import check_training_inputs, record_training
+
+    check_training_inputs(X, y)
     # Split data into training and validation sets
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+    holdout_fraction, split_seed = 0.2, 42
+    X_train, X_val, y_train, y_val = train_test_split(
+        X, y, test_size=holdout_fraction, random_state=split_seed
+    )
 
     # Define models and their hyperparameter grids
     if problem_type in ['binary', 'multiclass']:
@@ -1036,6 +1042,7 @@ def train_and_validation_and_select_the_best_model(X, y, problem_type='binary',
             })
         }
         scoring = 'accuracy' if problem_type == 'binary' else 'f1_weighted'
+        metric = scoring
     elif problem_type == 'regression':
         models = {
             'linear regression': (LinearRegression(), {
@@ -1063,7 +1070,18 @@ def train_and_validation_and_select_the_best_model(X, y, problem_type='binary',
                 'gamma': ['scale', 'auto']
             })
         }
-        scoring = 'neg_mean_squared_error'
+        regression_metric = os.environ.get('SACK_REGRESSION_METRIC', 'mse').strip().lower()
+        if regression_metric == 'mse':
+            regression_loss = mean_squared_error
+            scoring = 'neg_mean_squared_error'
+        elif regression_metric == 'rmsle':
+            if (np.asarray(y, dtype=float) < 0).any():
+                raise ValueError('RMSLE requires nonnegative targets')
+            regression_loss = _root_mean_squared_log_error
+            scoring = make_scorer(regression_loss, greater_is_better=False)
+        else:
+            raise ValueError('SACK_REGRESSION_METRIC must be mse or rmsle')
+        metric = f'negative_{regression_metric}'
     else:
         raise ValueError("Invalid problem_type. Choose from 'binary', 'multiclass', or 'regression'.")
 
@@ -1092,7 +1110,7 @@ def train_and_validation_and_select_the_best_model(X, y, problem_type='binary',
                 score = (accuracy_score(y_val, y_pred) if problem_type == 'binary'
                          else f1_score(y_val, y_pred, average='weighted'))
             else:
-                score = -mean_squared_error(y_val, y_pred)
+                score = -regression_loss(y_val, y_pred)
             if not np.isfinite(score):
                 raise ValueError('Validation score is not finite')
         except Exception as exc:
@@ -1120,13 +1138,12 @@ def train_and_validation_and_select_the_best_model(X, y, problem_type='binary',
         results[model_name]['status'] = 'selected'
         results[model_name]['model_details'] = model_details(estimator)
         break
+    print(f'Validation protocol: {holdout_fraction:.0%} holdout ({len(X_val)} rows), random_state={split_seed}')
+    print(f'Validation metric: {metric} (higher is better)')
     for model_name, result in results.items():
         print(f'Model: {model_name}, Result: {result}')
     if best_model is None:
         raise ValueError(f'No model was trained successfully: {results}')
-    from sack.model_audit import record_training
-    metric = ('accuracy' if problem_type == 'binary' else
-              'f1_weighted' if problem_type == 'multiclass' else 'negative_mse')
     return record_training(best_model, X, y, results, best_score, metric)
 # Example usage:
 # best_model, performance_results = select_best_model(X, y, problem_type='classification')

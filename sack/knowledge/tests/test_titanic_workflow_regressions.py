@@ -19,7 +19,7 @@ import pytest
 
 from sack.runtime_support import (
     ReplyFormatError, extract_stage_body, float32_bits, missing_insight_fields,
-    normalize_review, parse_json_object, strip_stage_output, validate_eda_tool_keywords, ToolCallError,
+    normalize_review, parse_json_object, strip_stage_output, validate_tool_keywords, ToolCallError,
 )
 
 ROOT = Path(__file__).parents[3]
@@ -40,7 +40,7 @@ def load_methods(relative, class_name, names, **extra):
                      extract_stage_body=extract_stage_body, strip_stage_output=strip_stage_output,
                      normalize_review=normalize_review, parse_json_object=parse_json_object,
                      ReplyFormatError=ReplyFormatError, ToolCallError=ToolCallError,
-                     validate_eda_tool_keywords=validate_eda_tool_keywords,
+                     validate_tool_keywords=validate_tool_keywords,
                      SACK_PACKAGE_DIR=ROOT / 'sack')
     namespace.update(extra)
     exec(compile(ast.fix_missing_locations(ast.Module(body=methods, type_ignores=[])),
@@ -396,29 +396,93 @@ def test_assembled_syntax_error_is_saved_before_subprocess(tmp_path):
     assert len(developer.all_error_messages) == 1
 
 
-def test_caught_invalid_eda_tool_keyword_enters_debugging_before_execution(tmp_path):
+@pytest.mark.parametrize('phase,module,tool,keyword', [
+    ('IEDA Insight Extraction', 'eda_tools', 'analyze_high_cardinality_impact', 'high_cardinality_threshold'),
+    ('Data Cleaning', 'ml_tools', 'detect_and_handle_outliers_iqr', 'return_mask'),
+])
+def test_caught_invalid_tool_keyword_enters_debugging_before_execution(tmp_path, phase, module, tool, keyword):
     script = tmp_path / 'run.py'
-    script.write_text('from Tools.eda_tools import analyze_high_cardinality_impact as impact\n'
-                      'try:\n    impact(data, high_cardinality_threshold=10)\n'
+    script.write_text(f'from Tools.{module} import {tool} as selected_tool\n'
+                      f'try:\n    selected_tool(data, {keyword}=10)\n'
                       'except Exception:\n    print("ignored")\n')
     methods = load_methods('sack/Agents/agent_developer.py', 'Developer', ['_run_code'])
+
     def forbidden(*args, **kwargs):
         pytest.fail('Caught invalid tool calls must be rejected before subprocess')
+
     methods['_run_code'].__globals__['subprocess'] = SimpleNamespace(run=forbidden)
     developer = SimpleNamespace(all_error_messages=[])
-    state = SimpleNamespace(restore_dir=str(tmp_path), dir_name='deep', phase='IEDA Insight Extraction')
+    state = SimpleNamespace(restore_dir=str(tmp_path), dir_name='stage', phase=phase)
     assert methods['_run_code'](developer, state, False, str(script)) is True
-    error = (tmp_path / 'deep_error.txt').read_text()
-    assert 'high_cardinality_threshold' in error and 'Supported keywords' in error
-    assert (tmp_path / 'deep_output.txt').read_text() == ''
+    error = (tmp_path / 'stage_error.txt').read_text()
+    assert keyword in error and 'Supported keywords' in error
+    assert (tmp_path / 'stage_output.txt').read_text() == ''
 
 
 def test_valid_eda_tool_keywords_and_other_functions_are_not_rejected():
     tools = (ROOT / 'sack/Tools/eda_tools.py').read_text()
-    validate_eda_tool_keywords(
+    validate_tool_keywords(
         'from Tools.eda_tools import analyze_high_cardinality_impact\n'
         'result = analyze_high_cardinality_impact(data, target_column="survived")\n'
-        'unrelated(high_cardinality_threshold=10)\n', tools)
+        'unrelated(high_cardinality_threshold=10)\n', tools, 'eda_tools')
+
+
+@pytest.mark.parametrize('values,passed', [('3.5,7.0', True), ('3.5,6.0', False), ('7.0,3.5', False)])
+def test_cleaning_acceptance_detects_clipped_or_reordered_targets(tmp_path, values, passed):
+    (tmp_path / 'train.csv').write_text('id,amount\n1,3.5\n2,7.0\n')
+    (tmp_path / 'test.csv').write_text('id\n3\n')
+    first, second = values.split(',')
+    (tmp_path / 'cleaned_train.csv').write_text(f'id,amount\n1,{first}\n2,{second}\n')
+    methods = load_methods('sack/Tools/unit_test.py', 'TestTool', ['test_cleaned_train_no_missing_target'], pd=pd)
+    state = SimpleNamespace(competition_dir=str(tmp_path))
+    result = methods['test_cleaned_train_no_missing_target'](None, state)
+    assert result[0] is passed
+
+
+@pytest.mark.parametrize('count,passed', [(50, True), (51, False)])
+def test_feature_acceptance_reports_the_actual_width_and_limit(tmp_path, count, passed):
+    (tmp_path / 'cleaned_train.csv').write_text('id,amount,category\n1,3.5,A\n')
+    (tmp_path / 'sample_submission.csv').write_text('id,amount\n2,0\n')
+    predictors = ','.join(f'feature_{i}' for i in range(count - 2))
+    (tmp_path / 'processed_train.csv').write_text(f'id,amount,{predictors}\n')
+    methods = load_methods('sack/Tools/unit_test.py', 'TestTool', ['test_processed_train_feature_number'], pd=pd)
+    state = SimpleNamespace(competition_dir=str(tmp_path))
+    result = methods['test_processed_train_feature_number'](None, state)
+    assert result[0] is passed
+    if not passed:
+        assert '51 columns' in result[2] and 'limit is 50' in result[2]
+
+
+@pytest.mark.parametrize('response_type', ['complete', 'truncated', 'empty'])
+def test_research_report_preserves_all_stage_reports_after_truncation(tmp_path, response_type):
+    phases = ('pre_eda', 'data_cleaning', 'deep_eda', 'feature_engineering', 'model_build_predict')
+    for phase in phases:
+        folder = tmp_path / phase
+        folder.mkdir()
+        (folder / 'report.txt').write_text(f'Verified details for {phase}.')
+    full = (
+        '# Competition study\n\n## 1. PRELIMINARY EDA\nInitial results.\n'
+        '## 2. DATA CLEANING\nCleaning results.\n## 3. DEEP EDA\nAnalysis.\n'
+        '## 4. FEATURE ENGINEERING\nFeature results.\n'
+        '## 5. MODEL BUILDING, VALIDATION, AND PREDICTION\nModel results.\n'
+        '## 6. CONCLUSION\nDone.\n<!-- end of report -->'
+    )
+    reports = {'complete': full, 'truncated': full.split('## 4.')[0], 'empty': None}
+    responses = iter(['Send reports', reports[response_type]])
+    method = load_methods(
+        'sack/Agents/agent_summarizer.py', 'Summarizer', ['_generate_research_report'],
+        read_file=lambda path: Path(path).read_text(),
+        PROMPT_SUMMARIZER_RESEARCH_REPORT='Summarize the reports.',
+    )['_generate_research_report']
+    summarizer = SimpleNamespace(
+        llm=SimpleNamespace(generate=lambda *args, **kwargs: (next(responses), [])),
+        _parse_markdown=lambda result: result,
+    )
+    report = method(summarizer, SimpleNamespace(competition_dir=str(tmp_path)))
+    if response_type == 'complete':
+        assert 'Model results.' in report and '<!-- end of report -->' not in report
+    else:
+        assert all(f'Verified details for {phase}.' in report for phase in phases)
 
 
 @pytest.mark.parametrize('fix_reply', ['I cannot provide corrected code.', '```python\n  \n```'])
