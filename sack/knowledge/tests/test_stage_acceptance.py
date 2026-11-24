@@ -225,3 +225,15 @@ def test_spatial_tool_uses_aligned_proxy_values_after_dropping_missing_rows():
     data.loc[0:5, 'coord_x'] = np.nan
     data.loc[21:22, 'proxy'] = np.inf
     assert analyze_spatial_correlation(data) == 1.0
+
+
+
+def test_high_cardinality_impact_is_zero_when_no_categories_are_high_cardinality():
+    import pandas as pd
+    from sack.Tools.eda_tools import analyze_high_cardinality_impact
+
+    data = pd.DataFrame({'policy': ['A', 'B'] * 15, 'premium': range(30)})
+    assert analyze_high_cardinality_impact(data, target_column='premium') == {
+        'high_cardinality_ratio': 0.0,
+        'high_cardinality_impact': 0.0,
+    }

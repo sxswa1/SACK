@@ -1817,6 +1817,8 @@ def analyze_high_cardinality_impact(data: pd.DataFrame, target_column: str = Non
 
     # 高基数判断（固定阈值≥20个唯一值）
     high_card_cols = [col for col in categorical_cols if data[col].nunique() >= 20]
+    if not high_card_cols:
+        return {"high_cardinality_ratio": 0.0, "high_cardinality_impact": 0.0}
     high_card_ratio = len(high_card_cols) / len(categorical_cols)
 
     # 影响强度（监督模式：编码后特征重要性；无监督模式：唯一值占比方差）
