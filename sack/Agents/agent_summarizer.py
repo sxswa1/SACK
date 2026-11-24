@@ -100,10 +100,7 @@ class Summarizer(Agent): # 阶段性总结工作 为下一个阶段提供见解
         phase_sections = '\n\n'.join(f'## {title}\n\n{report}' for title, report in reports.items())
         _, history = self.llm.generate(PROMPT_SUMMARIZER_RESEARCH_REPORT, [], max_completion_tokens=4096)
         raw_report, _ = self.llm.generate(phase_sections, history, max_completion_tokens=4096)
-        try:
-            summary = self._parse_markdown(raw_report).strip()
-        except (AttributeError, ValueError):
-            summary = (raw_report or '').strip()
+        summary = self._parse_markdown(raw_report or '').strip()
 
         end_marker = '<!-- end of report -->'
         headings = set(re.findall(r'^##\s+(?:[0-9]+\.\s+)?([^\n]+?)\s*$', summary, re.MULTILINE))
