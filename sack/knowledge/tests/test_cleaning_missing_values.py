@@ -55,3 +55,19 @@ def test_default_missing_value_rules_render_the_same_fraction_and_percentage(tmp
         state.restore_dir = tmp_path
         rules = state.generate_rules()
         assert 'fraction of rows with missing values exceeds 0.5 on a 0-to-1 scale (0.5 means 50%)' in rules
+
+
+
+def test_missing_fraction_strictly_exceeds_threshold_and_preserves_column_order():
+    data = pd.DataFrame({
+        'reviewed': [None, 1, 2],
+        'excluded': [None, None, None],
+        'too_sparse': [None, None, 1],
+        'intact': [1, 2, 3],
+    })
+    selected = ['reviewed', 'too_sparse', 'intact']
+    for threshold in (0.5, 1 / 3):
+        reduced = remove_columns_with_missing_data(data, thresh=threshold, columns=selected)
+        assert list(reduced) == ['reviewed', 'excluded', 'intact']
+    assert list(remove_columns_with_missing_data(data, thresh=0)) == ['intact']
+    assert list(remove_columns_with_missing_data(data, thresh=1)) == list(data)

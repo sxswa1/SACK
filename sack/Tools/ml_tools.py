@@ -58,7 +58,7 @@ def remove_columns_with_missing_data(data: pd.DataFrame, thresh: float = 0.5,
 
     Args:
         data (pd.DataFrame): The input DataFrame.
-        thresh (float, optional): The minimum proportion of missing values required to drop a column.
+        thresh (float, optional): Drop columns with a missing fraction strictly above this threshold.
                                     Should be between 0 and 1. Defaults to 0.5.
         columns (str or List[str], optional): Labels of columns to consider. Defaults to None.
 
@@ -75,17 +75,8 @@ def remove_columns_with_missing_data(data: pd.DataFrame, thresh: float = 0.5,
     else:
         data_subset = data
 
-    # Calculate the number of missing values allowed based on the threshold
-    max_missing = int(thresh * len(data_subset))
-
-    # Identify columns to keep
-    columns_to_keep = data_subset.columns[data_subset.isna().sum() < max_missing]
-
-    # If columns was specified, add back other columns not in the subset
-    if columns is not None:
-        columns_to_keep = columns_to_keep.union(data.columns.difference(columns))
-
-    return data[columns_to_keep]
+    drop_columns = data_subset.columns[data_subset.isna().mean() > thresh]
+    return data.drop(columns=drop_columns)
 
 
 def detect_and_handle_outliers_zscore(data: pd.DataFrame, columns: Union[str, List[str]], threshold: float = 3.0,
