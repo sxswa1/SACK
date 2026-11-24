@@ -254,7 +254,7 @@ class TestTool:  # 所有单元测试函数都定义在这里。
             return False, 15, (
                 'No predictor columns remain after feature selection. Preserve at least one real predictor, '
                 'excluding IDs and targets. Feature selection tools return feature names in the '
-                '"feature" column. Their output column names are not the selected predictors.'
+                "'feature' column. Their output column names are not the selected predictors."
             )
 
         limit = max(3 * len(cleaned_columns), 50)
@@ -268,6 +268,7 @@ class TestTool:  # 所有单元测试函数都定义在这里。
             f'Processed training has {count} columns. The limit is {limit}, including IDs and targets. '
             'Remove redundant derived features and keep required categorical encodings.\n'
             f'Cleaned feature names: {list(cleaned_columns)}\n'
+            f'Processed feature names: {list(processed_columns)}\n'
             f'Cleaned categorical cardinalities:\n{cardinalities.sort_values(ascending=False).to_string()}'
         )
 
