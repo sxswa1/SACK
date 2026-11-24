@@ -143,6 +143,8 @@ class APIHandler:
         return truncated
 
     def get_output(self, messages: List[Dict[str, str]], settings: APISettings, enable_thinking=True, response_type: str = 'text') -> str:
+        if self.endpoint_role == "coder" and os.environ.get("SACK_CODER_DISABLE_THINKING") == "1":
+            enable_thinking = False
         last_error = None
         for attempt in range(MAX_ATTEMPTS):
             try:
